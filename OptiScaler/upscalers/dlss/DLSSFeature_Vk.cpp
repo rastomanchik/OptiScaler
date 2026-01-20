@@ -123,6 +123,7 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
             paramOutput == nullptr)
         {
             rcasEnabled = false;
+            useSS = false;
         }
 
         if (rcasEnabled)
@@ -138,6 +139,10 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
                     paramOutput->Resource.ImageViewInfo.Height, paramOutput->Resource.ImageViewInfo.Format,
                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
             {
+                VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                if (oldImage != VK_NULL_HANDLE && oldImage == paramOutput->Resource.ImageViewInfo.Image)
+                    oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
                 paramOutput->Resource.ImageViewInfo.Image = RCAS->GetImage();
                 paramOutput->Resource.ImageViewInfo.ImageView = RCAS->GetImageView();
 
@@ -147,11 +152,6 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
                 range.levelCount = 1;
                 range.baseArrayLayer = 0;
                 range.layerCount = 1;
-
-                VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-                if (oldImage != VK_NULL_HANDLE && oldImage == paramOutput->Resource.ImageViewInfo.Image)
-                    oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
                 RCAS->SetImageLayout(InCmdBuffer, paramOutput->Resource.ImageViewInfo.Image, oldLayout,
                                      VK_IMAGE_LAYOUT_GENERAL, range);
@@ -164,13 +164,22 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
 
         if (useSS)
         {
+            if (finalOutputImage != RCAS->GetImage())
+            {
+                finalOutputView = paramOutput->Resource.ImageViewInfo.ImageView;
+                finalOutputImage = paramOutput->Resource.ImageViewInfo.Image;
+            }
+
             VkImage oldImage = OS->GetImage();
 
             if (OS->CreateImageResource(
-                    Device, PhysicalDevice, paramOutput->Resource.ImageViewInfo.Width,
-                    paramOutput->Resource.ImageViewInfo.Height, paramOutput->Resource.ImageViewInfo.Format,
+                    Device, PhysicalDevice, TargetWidth(), TargetHeight(), paramOutput->Resource.ImageViewInfo.Format,
                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
             {
+                VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+                if (oldImage != VK_NULL_HANDLE && oldImage == paramOutput->Resource.ImageViewInfo.Image)
+                    oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
                 paramOutput->Resource.ImageViewInfo.Image = OS->GetImage();
                 paramOutput->Resource.ImageViewInfo.ImageView = OS->GetImageView();
 
@@ -180,11 +189,6 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
                 range.levelCount = 1;
                 range.baseArrayLayer = 0;
                 range.layerCount = 1;
-
-                VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-                if (oldImage != VK_NULL_HANDLE && oldImage == paramOutput->Resource.ImageViewInfo.Image)
-                    oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
                 OS->SetImageLayout(InCmdBuffer, paramOutput->Resource.ImageViewInfo.Image, oldLayout,
                                    VK_IMAGE_LAYOUT_GENERAL, range);
@@ -209,7 +213,7 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
             OS->SetImageLayout(InCmdBuffer, OS->GetImage(), VK_IMAGE_LAYOUT_GENERAL,
                                VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range);
 
-            VkExtent2D outExtent = { TargetWidth(), TargetHeight() };
+            VkExtent2D outExtent = { DisplayWidth(), DisplayHeight() };
 
             if (!rcasEnabled)
                 OS->Dispatch(Device, InCmdBuffer, OS->GetImageView(), finalOutputView, outExtent);
@@ -239,8 +243,6 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
 
                 RCAS->SetImageLayout(InCmdBuffer, RCAS->GetImage(), VK_IMAGE_LAYOUT_GENERAL,
                                      VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range);
-                RCAS->SetImageLayout(InCmdBuffer, finalOutputImage, VK_IMAGE_LAYOUT_GENERAL, VK_IMAGE_LAYOUT_GENERAL,
-                                     range);
 
                 RcasConstants rcasConstants {};
                 rcasConstants.Sharpness = _sharpness;
@@ -252,8 +254,7 @@ bool DLSSFeatureVk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* I
                 rcasConstants.RenderHeight = RenderHeight();
                 rcasConstants.RenderWidth = RenderWidth();
 
-                VkExtent2D outExtent = { paramOutput->Resource.ImageViewInfo.Width,
-                                         paramOutput->Resource.ImageViewInfo.Height };
+                VkExtent2D outExtent = { DisplayWidth(), DisplayHeight() };
 
                 RCAS->Dispatch(Device, InCmdBuffer, rcasConstants, RCAS->GetImageView(),
                                paramVelocity->Resource.ImageViewInfo.ImageView, finalOutputView, outExtent);

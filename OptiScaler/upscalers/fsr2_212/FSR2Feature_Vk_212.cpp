@@ -36,19 +36,19 @@ bool FSR2FeatureVk212::InitFSR2(const NVSDK_NGX_Parameter* InParameters)
 
         _contextDesc.device = Fsr212::ffxGetDeviceVK212(Device);
 
-        if (Config::Instance()->OutputScalingEnabled.value_or(false) && LowResMV())
+        if (Config::Instance()->OutputScalingEnabled.value_or_default() && LowResMV())
         {
-            float ssMulti = Config::Instance()->OutputScalingMultiplier.value_or(1.5f);
+            float ssMulti = Config::Instance()->OutputScalingMultiplier.value_or_default();
 
             if (ssMulti < 0.5f)
             {
                 ssMulti = 0.5f;
-                Config::Instance()->OutputScalingMultiplier = ssMulti;
+                Config::Instance()->OutputScalingMultiplier.set_volatile_value(ssMulti);
             }
             else if (ssMulti > 3.0f)
             {
                 ssMulti = 3.0f;
-                Config::Instance()->OutputScalingMultiplier = ssMulti;
+                Config::Instance()->OutputScalingMultiplier.set_volatile_value(ssMulti);
             }
 
             _targetWidth = static_cast<unsigned int>(DisplayWidth() * ssMulti);
@@ -60,21 +60,37 @@ bool FSR2FeatureVk212::InitFSR2(const NVSDK_NGX_Parameter* InParameters)
             _targetHeight = DisplayHeight();
         }
 
-        if (Config::Instance()->ExtendedLimits.value_or(false) && RenderWidth() > DisplayWidth())
+        // extended limits changes how resolution
+        if (Config::Instance()->ExtendedLimits.value_or_default() && RenderWidth() > DisplayWidth())
         {
-            _targetWidth = RenderWidth();
-            _targetHeight = RenderHeight();
+            _contextDesc.maxRenderSize.width = RenderWidth();
+            _contextDesc.maxRenderSize.height = RenderHeight();
 
-            // enable output scaling to restore image
-            if (LowResMV())
+            Config::Instance()->OutputScalingMultiplier.set_volatile_value(1.0f);
+
+            // if output scaling active let it to handle downsampling
+            if (Config::Instance()->OutputScalingEnabled.value_or_default() && LowResMV())
             {
-                Config::Instance()->OutputScalingMultiplier.set_volatile_value(1.0f);
-                Config::Instance()->OutputScalingEnabled.set_volatile_value(true);
+                _contextDesc.displaySize.width = _contextDesc.maxRenderSize.width;
+                _contextDesc.displaySize.height = _contextDesc.maxRenderSize.height;
+
+                // update target res
+                _targetWidth = _contextDesc.maxRenderSize.width;
+                _targetHeight = _contextDesc.maxRenderSize.height;
+            }
+            else
+            {
+                _contextDesc.displaySize.width = DisplayWidth();
+                _contextDesc.displaySize.height = DisplayHeight();
             }
         }
-
-        _contextDesc.displaySize.width = TargetWidth();
-        _contextDesc.displaySize.height = TargetHeight();
+        else
+        {
+            _contextDesc.maxRenderSize.width = TargetWidth() > DisplayWidth() ? TargetWidth() : DisplayWidth();
+            _contextDesc.maxRenderSize.height = TargetHeight() > DisplayHeight() ? TargetHeight() : DisplayHeight();
+            _contextDesc.displaySize.width = TargetWidth();
+            _contextDesc.displaySize.height = TargetHeight();
+        }
 
         _contextDesc.flags = 0;
 
@@ -397,6 +413,10 @@ bool FSR2FeatureVk212::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter
                 ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Format,
                 VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
         {
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (oldImage != VK_NULL_HANDLE && oldImage == RCAS->GetImage())
+                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
             params.output = Fsr212::ffxGetTextureResourceVK212(
                 &_context, RCAS->GetImage(), RCAS->GetImageView(),
                 ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Width,
@@ -411,11 +431,6 @@ bool FSR2FeatureVk212::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter
             range.baseArrayLayer = 0;
             range.layerCount = 1;
 
-            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-            if (oldImage != VK_NULL_HANDLE && oldImage == RCAS->GetImage())
-                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
             RCAS->SetImageLayout(InCmdBuffer, RCAS->GetImage(), oldLayout, VK_IMAGE_LAYOUT_GENERAL, range);
         }
         else
@@ -428,12 +443,15 @@ bool FSR2FeatureVk212::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter
     {
         VkImage oldImage = OS->GetImage();
 
-        if (OS->CreateImageResource(
-                Device, PhysicalDevice, ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Width,
-                ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Height,
-                ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Format,
-                VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT))
+        if (OS->CreateImageResource(Device, PhysicalDevice, TargetWidth(), TargetHeight(),
+                                    ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Format,
+                                    VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
+                                        VK_IMAGE_USAGE_TRANSFER_DST_BIT))
         {
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (oldImage != VK_NULL_HANDLE && oldImage == OS->GetImage())
+                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
             params.output = Fsr212::ffxGetTextureResourceVK212(
                 &_context, OS->GetImage(), OS->GetImageView(),
                 ((NVSDK_NGX_Resource_VK*) paramOutput)->Resource.ImageViewInfo.Width,
@@ -447,11 +465,6 @@ bool FSR2FeatureVk212::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter
             range.levelCount = 1;
             range.baseArrayLayer = 0;
             range.layerCount = 1;
-
-            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-            if (oldImage != VK_NULL_HANDLE && oldImage == OS->GetImage())
-                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             OS->SetImageLayout(InCmdBuffer, OS->GetImage(), oldLayout, VK_IMAGE_LAYOUT_GENERAL, range);
         }
@@ -567,7 +580,7 @@ bool FSR2FeatureVk212::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter
         OS->SetImageLayout(InCmdBuffer, OS->GetImage(), VK_IMAGE_LAYOUT_GENERAL,
                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range);
 
-        VkExtent2D outExtent = { TargetWidth(), TargetHeight() };
+        VkExtent2D outExtent = { DisplayWidth(), DisplayHeight() };
 
         if (!rcasEnabled)
             OS->Dispatch(Device, InCmdBuffer, OS->GetImageView(), finalOutputView, outExtent);
@@ -597,7 +610,7 @@ bool FSR2FeatureVk212::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter
         rcasConstants.RenderHeight = RenderHeight();
         rcasConstants.RenderWidth = RenderWidth();
 
-        VkExtent2D outExtent = { params.output.description.width, params.output.description.height };
+        VkExtent2D outExtent = { DisplayWidth(), DisplayHeight() };
 
         RCAS->Dispatch(Device, InCmdBuffer, rcasConstants, RCAS->GetImageView(),
                        ((NVSDK_NGX_Resource_VK*) paramVelocity)->Resource.ImageViewInfo.ImageView, finalOutputView,

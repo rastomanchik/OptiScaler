@@ -511,6 +511,10 @@ bool XeSSFeature_Vk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* 
                                       VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                                           VK_IMAGE_USAGE_TRANSFER_DST_BIT))
         {
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (oldImage != VK_NULL_HANDLE && oldImage == params.outputTexture.image)
+                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
             params.outputTexture.image = RCAS->GetImage();
             params.outputTexture.imageView = RCAS->GetImageView();
 
@@ -520,11 +524,6 @@ bool XeSSFeature_Vk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* 
             range.levelCount = 1;
             range.baseArrayLayer = 0;
             range.layerCount = 1;
-
-            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-            if (oldImage != VK_NULL_HANDLE && oldImage == params.outputTexture.image)
-                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             RCAS->SetImageLayout(InCmdBuffer, params.outputTexture.image, oldLayout, VK_IMAGE_LAYOUT_GENERAL, range);
         }
@@ -542,6 +541,10 @@ bool XeSSFeature_Vk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* 
                                     VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT |
                                         VK_IMAGE_USAGE_TRANSFER_DST_BIT))
         {
+            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+            if (oldImage != VK_NULL_HANDLE && oldImage == params.outputTexture.image)
+                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
             params.outputTexture.image = OS->GetImage();
             params.outputTexture.imageView = OS->GetImageView();
 
@@ -551,11 +554,6 @@ bool XeSSFeature_Vk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* 
             range.levelCount = 1;
             range.baseArrayLayer = 0;
             range.layerCount = 1;
-
-            VkImageLayout oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-
-            if (oldImage != VK_NULL_HANDLE && oldImage == params.outputTexture.image)
-                oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
             OS->SetImageLayout(InCmdBuffer, params.outputTexture.image, oldLayout, VK_IMAGE_LAYOUT_GENERAL, range);
         }
@@ -586,7 +584,7 @@ bool XeSSFeature_Vk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* 
         OS->SetImageLayout(InCmdBuffer, OS->GetImage(), VK_IMAGE_LAYOUT_GENERAL,
                            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, range);
 
-        VkExtent2D outExtent = { TargetWidth(), TargetHeight() };
+        VkExtent2D outExtent = { DisplayWidth(), DisplayHeight() };
 
         if (!rcasEnabled)
             OS->Dispatch(Device, InCmdBuffer, OS->GetImageView(), finalOutputView, outExtent);
@@ -616,7 +614,7 @@ bool XeSSFeature_Vk::Evaluate(VkCommandBuffer InCmdBuffer, NVSDK_NGX_Parameter* 
         rcasConstants.RenderHeight = RenderHeight();
         rcasConstants.RenderWidth = RenderWidth();
 
-        VkExtent2D outExtent = { params.outputTexture.width, params.outputTexture.height };
+        VkExtent2D outExtent = { DisplayWidth(), DisplayHeight() };
 
         RCAS->Dispatch(Device, InCmdBuffer, rcasConstants, RCAS->GetImageView(), params.velocityTexture.imageView,
                        finalOutputView, outExtent);
