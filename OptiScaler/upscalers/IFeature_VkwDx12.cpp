@@ -1313,7 +1313,8 @@ bool IFeature_VkwDx12::ProcessVulkanTextures(::VkCommandBuffer InCmdList, const 
         params.ReplayExtendedDynamicState = true;
         params.ReplayPushConstants = true;
         params.ReplayVertexIndex = true;
-        params.RequiredGraphicsSetMask = 0xFF;
+        params.RequiredGraphicsSetMask = 0xFFFFFFFFu;
+        params.OverrideGraphicsLayout = VK_NULL_HANDLE;
 
         // Simple one-line call using cached function table
         if (!Vulkan_wDx12::cmdBufferStateTracker.CaptureAndReplay(InCmdList, VulkanBarrierCommandBuffer[frame], params))
