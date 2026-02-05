@@ -49,6 +49,10 @@ class IFeature
     std::unordered_set<std::pair<float, float>, hashFunction> _jitterInfo;
 
   protected:
+    // D3D11with12
+    inline static ID3D12Device* _dx11on12Device = nullptr;
+    inline static ID3D12Device* _localDx11on12Device = nullptr;
+
     bool _initParameters = false;
     NVSDK_NGX_Handle* _handle = nullptr;
 
@@ -85,6 +89,7 @@ class IFeature
     static unsigned int GetNextHandleId() { return handleCounter++; }
     int GetFeatureFlags() const { return _featureFlags; }
 
+    virtual bool IsWithDx12() = 0;
     virtual feature_version Version() = 0;
     virtual std::string Name() const = 0;
 

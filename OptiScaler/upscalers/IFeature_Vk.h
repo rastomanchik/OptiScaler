@@ -26,5 +26,7 @@ class IFeature_Vk : public virtual IFeature
 
     IFeature_Vk(unsigned int InHandleId, NVSDK_NGX_Parameter* InParameters) : IFeature(InHandleId, InParameters) {}
 
+    bool IsWithDx12() { return false; }
+
     virtual ~IFeature_Vk() {}
 };
