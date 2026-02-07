@@ -173,10 +173,8 @@ void DepthTransfer_Vk::CreateDescriptorSetLayout()
 
 void DepthTransfer_Vk::CreateDescriptorPool()
 {
-    std::vector<VkDescriptorPoolSize> poolSizes = {
-        { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) },
-        { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT) }
-    };
+    std::vector<VkDescriptorPoolSize> poolSizes = { { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE,
+                                                      static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT * 2) } };
 
     VkDescriptorPoolCreateInfo poolInfo {};
     poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -213,8 +211,9 @@ void DepthTransfer_Vk::UpdateDescriptorSet(VkCommandBuffer cmdList, int setIndex
 
     // 0: Source
     VkDescriptorImageInfo sourceInfo {};
-    sourceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    sourceInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
     sourceInfo.imageView = inputView;
+    sourceInfo.sampler = VK_NULL_HANDLE;
 
     VkWriteDescriptorSet descriptorWriteSource {};
     descriptorWriteSource.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
