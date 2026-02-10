@@ -4,117 +4,129 @@ cbuffer Params : register(b0, space0)
 cbuffer Params : register(b0)
 #endif
 {
-    int _SrcWidth; // Source texture width
-    int _SrcHeight; // Source texture height
-    int _DstWidth; // Destination texture width
-    int _DstHeight; // Destination texture height
+    int _SrcWidth;
+    int _SrcHeight;
+    int _DstWidth;
+    int _DstHeight;
 };
 
-// Texture resources.
 #ifdef VK_MODE
 [[vk::binding(1, 0)]]
 #endif
-Texture2D<float4> InputTexture : register(t0); // Input texture (source image)
+Texture2D<float4> InputTexture : register(t0);
 
 #ifdef VK_MODE
 [[vk::binding(2, 0)]]
 #endif
-RWTexture2D<float4> OutputTexture : register(u0); // Output texture (downsampled image)
+RWTexture2D<float4> OutputTexture : register(u0);
 
-float luminance(float3 color)
+#ifdef VK_MODE
+[[vk::binding(3, 0)]]
+#endif
+SamplerState LinearClampSampler : register(s0);
+
+static int ClampInt(int v, int lo, int hi)
 {
-    return dot(color, float3(0.2126, 0.7152, 0.0722));
+    return min(max(v, lo), hi);
 }
 
-// Lanczos kernel function.
-float lanczosKernel(float x, float radius, float pi)
+static float Sinc(float x)
 {
-    if (x == 0.0)
-        return 1.0;
-    if (x > radius)
-        return 0.0;
-
-    x *= pi;
-    return (sin(x) / x) * (sin(x / radius) / (x / radius));
+    x *= 3.1415926535f;
+    if (abs(x) < 1e-5f)
+        return 1.0f;
+    return sin(x) / x;
 }
 
-[numthreads(16, 16, 1)]
-void CSMain(uint3 dispatchThreadID : SV_DispatchThreadID)
+static float Lanczos(float x, float a)
 {
-    // Coordinates of the pixel in the target (downsampled) texture.
-    uint2 targetCoords = dispatchThreadID.xy;
+    float ax = abs(x);
+    if (ax >= a)
+        return 0.0f;
+    return Sinc(x) * Sinc(x / a);
+}
 
-    // Ensure we are within the target texture bounds.
-    if (targetCoords.x >= _DstWidth || targetCoords.y >= _DstHeight)
+// Set a=2 for Lanczos2, a=3 for Lanczos3 (but then you need 6x6 or bigger).
+static const float A_LANCZOS = 2.0f;
+
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
+{
+    uint ox = id.x;
+    uint oy = id.y;
+    if (ox >= (uint) _DstWidth || oy >= (uint) _DstHeight)
         return;
 
-    // Calculate scaling factor and source position.
-    float2 scale = float2(_SrcWidth, _SrcHeight) / float2(_DstWidth, _DstHeight);
-    float2 sourcePos = float2(targetCoords) * scale;
+    float2 dst = float2((float) ox + 0.5f, (float) oy + 0.5f);
+    float2 scale = float2((float) _SrcWidth / (float) _DstWidth,
+                          (float) _SrcHeight / (float) _DstHeight);
 
-    // Lanczos kernel properties.
-    const float lanczosRadius = 3.0; // Typical radius (adjustable for quality/performance)
-    const float pi = 3.14159265359;
+    float2 srcPos = dst * scale - 0.5f;
 
-    // Accumulators for color and weight.
-    float4 color = 0.0;
-    float totalWeight = 0.0;
-    float avgLuminance = 0.0;
+    float2 ip = floor(srcPos);
+    float2 f = srcPos - ip;
 
-    // First pass: Compute average luminance in the 4x4 neighborhood
-    for (int dy = -1; dy <= 2; dy++)
+    // For radius 2, use taps at {-1,0,1,2} around ip
+    int2 base = (int2) ip - int2(1, 1);
+
+    float wx[4];
+    float wy[4];
+    float sumWx = 0.0f;
+    float sumWy = 0.0f;
+
+    [unroll]
+    for (int i = 0; i < 4; ++i)
     {
-        for (int dx = -1; dx <= 2; dx++)
-        {
-            int2 sampleCoords = sourcePos + int2(dx, dy);
-            sampleCoords = clamp(sampleCoords, int2(0, 0), int2(_SrcWidth - 1, _SrcHeight - 1));
+        float dx = (float) i - 1.0f - f.x;
+        wx[i] = Lanczos(dx, A_LANCZOS);
+        sumWx += wx[i];
 
-            float4 sampleColor = InputTexture.Load(int3(sampleCoords, 0));
-            avgLuminance += luminance(sampleColor.rgb);
-        }
-    }
-    avgLuminance /= 16.0; // Normalize luminance by the 4x4 sample count
-
-    // Loop through the kernel window.
-    for (int y = -int(lanczosRadius); y <= int(lanczosRadius); y++)
-    {
-        for (int x = -int(lanczosRadius); x <= int(lanczosRadius); x++)
-        {
-            // Offset in source texture space.
-            float2 offset = float2(x, y);
-            float2 samplePos = sourcePos + offset;
-
-            // Ensure we sample within bounds.
-            samplePos = clamp(samplePos, float2(0, 0), float2(_SrcWidth - 1, _SrcHeight - 1));
-
-            // Fetch the texel.
-            float4 sampleColor = InputTexture.Load(int3(samplePos, 0));
-
-			// Compute the current luminance of the sample
-            float currentLuminance = luminance(sampleColor.rgb);
-			
-			// Scale the color to match the average luminance if it deviates too much
-            float luminanceDeviation = abs(currentLuminance - avgLuminance);
-            if (luminanceDeviation > 0.5) // Threshold for clamping
-            {
-                float luminanceScale = avgLuminance / max(currentLuminance, 1e-5); // Avoid division by zero
-                sampleColor.rgb *= luminanceScale; // Scale brightness while preserving hue/saturation
-            }
-
-            // Calculate Lanczos weight.
-            float2 dist = abs(samplePos - sourcePos);
-            float2 lanczosWeight = lanczosKernel(dist.x, lanczosRadius, pi) *
-                                   lanczosKernel(dist.y, lanczosRadius, pi);
-
-            // Accumulate weighted color.
-            color += sampleColor * lanczosWeight.x * lanczosWeight.y;
-            totalWeight += lanczosWeight.x * lanczosWeight.y;
-        }
+        float dy = (float) i - 1.0f - f.y;
+        wy[i] = Lanczos(dy, A_LANCZOS);
+        sumWy += wy[i];
     }
 
-    // Normalize the color by the total weight to avoid darkening/brightening.
-    color /= totalWeight;
+    float invSumWx = (sumWx != 0.0f) ? (1.0f / sumWx) : 0.0f;
+    float invSumWy = (sumWy != 0.0f) ? (1.0f / sumWy) : 0.0f;
 
-    // Write the result to the output texture.
-    OutputTexture[dispatchThreadID.xy] = color;
+    [unroll]
+    for (int i = 0; i < 4; ++i)
+    {
+        wx[i] *= invSumWx;
+        wy[i] *= invSumWy;
+    }
+
+    float2 invSrc = 1.0f / float2((float) _SrcWidth, (float) _SrcHeight);
+
+    float3 acc = 0.0f;
+
+    // Clamp like you did for bicubic is recommended (Lanczos rings more)
+    float3 mn = 1e30;
+    float3 mx = -1e30;
+
+    [unroll]
+    for (int j = 0; j < 4; ++j)
+    {
+        int y = ClampInt(base.y + j, 0, _SrcHeight - 1);
+        float wyj = wy[j];
+
+        [unroll]
+        for (int i = 0; i < 4; ++i)
+        {
+            int x = ClampInt(base.x + i, 0, _SrcWidth - 1);
+            float w = wx[i] * wyj;
+
+            // Sample at exact texel centers via UV
+            float2 uv = (float2((float) x + 0.5f, (float) y + 0.5f)) * invSrc;
+            float3 s = InputTexture.SampleLevel(LinearClampSampler, uv, 0.0f).rgb;
+
+            mn = min(mn, s);
+            mx = max(mx, s);
+
+            acc += s * w;
+        }
+    }
+
+    float3 outRgb = clamp(acc, mn, mx);
+    OutputTexture[uint2(ox, oy)] = float4(outRgb, 1.0f);
 }

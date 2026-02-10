@@ -20,67 +20,108 @@ Texture2D<float4> InputTexture : register(t0);
 #endif
 RWTexture2D<float4> OutputTexture : register(u0);
 
-float bicubic_weight(float x)
+#ifdef VK_MODE
+[[vk::binding(3, 0)]]
+#endif
+SamplerState LinearClampSampler : register(s0);
+
+// Keys bicubic parameter:
+//  -0.5 = Catmull-Rom (sharper)
+//  -0.75 = smoother (more Mitchell-ish feel, less ringing)
+// You can tune this constant. No extra cbuffer needed.
+static const float A = -0.75f;
+
+// Keys cubic weight for distance x in [0,2)
+static float CubicKeys(float x)
 {
-    float a = -0.75f;
-    float absX = abs(x);
-    if (absX <= 1.0f)
-        return (a + 2.0f) * absX * absX * absX - (a + 3.0f) * absX * absX + 1.0f;
-    else if (absX < 2.0f)
-        return a * absX * absX * absX - 5.0f * a * absX * absX + 8.0f * a * absX - 4.0f * a;
-    else
-        return 0.0f;
+    x = abs(x);
+    float x2 = x * x;
+    float x3 = x2 * x;
+
+    if (x < 1.0f)
+    {
+        return (A + 2.0f) * x3 - (A + 3.0f) * x2 + 1.0f;
+    }
+    else if (x < 2.0f)
+    {
+        return A * x3 - 5.0f * A * x2 + 8.0f * A * x - 4.0f * A;
+    }
+    return 0.0f;
 }
 
-// Luminance computation using perceptual weights
-float luminance(float3 color)
+// Compute two bilinear sample positions and their combined weights from 4 cubic taps.
+// This is the standard “4 taps via 2 bilinear taps per axis” trick.
+static void BicubicAxis(float t, out float w01, out float w23, out float o01, out float o23)
 {
-    return dot(color, float3(0.2126, 0.7152, 0.0722));
+    // t is fractional part in [0,1)
+    float w0 = CubicKeys(1.0f + t);
+    float w1 = CubicKeys(t);
+    float w2 = CubicKeys(1.0f - t);
+    float w3 = CubicKeys(2.0f - t);
+
+    w01 = w0 + w1;
+    w23 = w2 + w3;
+
+    // Avoid division by zero; in practice w01/w23 should be >0 for these kernels.
+    float invW01 = (w01 != 0.0f) ? (1.0f / w01) : 0.0f;
+    float invW23 = (w23 != 0.0f) ? (1.0f / w23) : 0.0f;
+
+    // Offsets relative to the “base” texel index (floor(pos) - 1)
+    // These produce the correct mix of the two texels in each bilinear pair.
+    o01 = (-1.0f) + (w1 * invW01); // between base+0 and base+1
+    o23 = (1.0f) + (w3 * invW23); // between base+2 and base+3
 }
 
-[numthreads(16, 16, 1)]
-void CSMain(uint3 DTid : SV_DispatchThreadID)
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    if (DTid.x >= _DstWidth || DTid.y >= _DstHeight)
+    uint ox = id.x;
+    uint oy = id.y;
+    if (ox >= (uint) _DstWidth || oy >= (uint) _DstHeight)
         return;
 
-    float2 uv = float2(DTid.x / (_DstWidth - 1.0f), DTid.y / (_DstHeight - 1.0f));
-    float2 pixel = uv * float2(_SrcWidth, _SrcHeight);
-    float2 texel = floor(pixel);
-    float2 t = pixel - texel;
-    t = t * t * (3.0f - 2.0f * t);
-    float4 result = float4(0.0f, 0.0f, 0.0f, 0.0f);
+    // Map destination pixel center to source pixel space (center-aligned)
+    float2 dst = float2((float) ox + 0.5f, (float) oy + 0.5f);
+    float2 scale = float2((float) _SrcWidth / (float) _DstWidth,
+                          (float) _SrcHeight / (float) _DstHeight);
 
-    float avgLuminance = 0.0;
-    for (int y = -1; y <= 2; y++)
-    {
-        for (int x = -1; x <= 2; x++)
-        {
-            avgLuminance += luminance(InputTexture.Load(int3(texel.x + x, texel.y + y, 0)).rgb);
-        }
-    }
-    avgLuminance /= 16.0; // Normalize luminance by the 4x4 sample count
+    // Source position in texel space, with texel centers at i+0.5
+    float2 srcPos = dst * scale - 0.5f;
 
-    for (int y = -1; y <= 2; y++)
-    {
-        for (int x = -1; x <= 2; x++)
-        {
-            float4 color = InputTexture.Load(int3(texel.x + x, texel.y + y, 0));
+    float2 ip = floor(srcPos);
+    float2 f = srcPos - ip;
 
-			// Compute the current luminance of the sample
-            float currentLuminance = luminance(color.rgb);
-			
-			// Scale the color to match the average luminance if it deviates too much
-            float luminanceDeviation = abs(currentLuminance - avgLuminance);
-            if (luminanceDeviation > 0.5) // Threshold for clamping
-            {
-                float luminanceScale = avgLuminance / max(currentLuminance, 1e-5); // Avoid division by zero
-                color.rgb *= luminanceScale; // Scale brightness while preserving hue/saturation
-            }
+    // Bicubic uses 4 taps: base = ip - 1
+    float2 base = ip - 1.0f;
 
-            float weight = bicubic_weight(x - t.x) * bicubic_weight(y - t.y);
-            result += color * weight;
-        }
-    }
-    OutputTexture[DTid.xy] = result;
+    float wx01, wx23, ox01, ox23;
+    float wy01, wy23, oy01, oy23;
+    BicubicAxis(f.x, wx01, wx23, ox01, ox23);
+    BicubicAxis(f.y, wy01, wy23, oy01, oy23);
+
+    // Convert texel-space sample positions to UV (normalized)
+    float2 invSrc = 1.0f / float2((float) _SrcWidth, (float) _SrcHeight);
+
+    float2 uv00 = (base + float2(ox01, oy01) + 0.5f) * invSrc;
+    float2 uv10 = (base + float2(ox23, oy01) + 0.5f) * invSrc;
+    float2 uv01 = (base + float2(ox01, oy23) + 0.5f) * invSrc;
+    float2 uv11 = (base + float2(ox23, oy23) + 0.5f) * invSrc;
+
+    // 4 bilinear samples (each bilinear internally mixes a 2x2 quad)
+    float3 s00 = InputTexture.SampleLevel(LinearClampSampler, uv00, 0.0f).rgb;
+    float3 s10 = InputTexture.SampleLevel(LinearClampSampler, uv10, 0.0f).rgb;
+    float3 s01 = InputTexture.SampleLevel(LinearClampSampler, uv01, 0.0f).rgb;
+    float3 s11 = InputTexture.SampleLevel(LinearClampSampler, uv11, 0.0f).rgb;
+
+    // Combine separably
+    float3 outRgb =
+        (s00 * wx01 + s10 * wx23) * wy01 +
+        (s01 * wx01 + s11 * wx23) * wy23;
+
+    // Cheap clamp (helps prevent HDR undershoot-looking pinholes)
+    float3 mn = min(min(s00, s10), min(s01, s11));
+    float3 mx = max(max(s00, s10), max(s01, s11));
+    outRgb = clamp(outRgb, mn, mx);
+
+    OutputTexture[uint2(ox, oy)] = float4(outRgb, 1.0f);
 }

@@ -283,7 +283,7 @@ void OS_Vk::UpdateDescriptorSet(VkCommandBuffer cmdList, int setIndex, VkImageVi
     descriptorWriteSource.descriptorCount = 1;
     descriptorWriteSource.pImageInfo = &sourceInfo;
 
-    if (Config::Instance()->OutputScalingUseFsr.value_or_default())
+    if (!_upsample)
     {
         // For FSR: Sampled image with separate sampler at binding 3
         sourceInfo.sampler = VK_NULL_HANDLE;
@@ -316,7 +316,7 @@ void OS_Vk::UpdateDescriptorSet(VkCommandBuffer cmdList, int setIndex, VkImageVi
     VkDescriptorImageInfo imageInfo {};
     VkWriteDescriptorSet descriptorWriteSampler {};
 
-    if (Config::Instance()->OutputScalingUseFsr.value_or_default())
+    if (!_upsample)
     {
         imageInfo.sampler = _textureSampler;
 
@@ -384,9 +384,18 @@ bool OS_Vk::Dispatch(VkDevice InDevice, VkCommandBuffer InCmdList, VkImageView I
                             &_descriptorSets[_currentSetIndex], 0, nullptr);
 
     // Dispatch
-    uint32_t groupX = (OutExtent.width + 15) / 16;
-    uint32_t groupY = (OutExtent.height + 15) / 16;
-    vkCmdDispatch(InCmdList, groupX, groupY, 1);
+    if (Config::Instance()->OutputScalingUseFsr.value_or_default() || _upsample)
+    {
+        uint32_t groupX = (OutExtent.width + 15) / 16;
+        uint32_t groupY = (OutExtent.height + 15) / 16;
+        vkCmdDispatch(InCmdList, groupX, groupY, 1);
+    }
+    else
+    {
+        uint32_t groupX = (OutExtent.width + 7) / 8;
+        uint32_t groupY = (OutExtent.height + 7) / 8;
+        vkCmdDispatch(InCmdList, groupX, groupY, 1);
+    }
 
     return true;
 }

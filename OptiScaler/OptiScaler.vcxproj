@@ -261,7 +261,7 @@ copy "$(SolutionDir)external\directx_agility_sdk\LICENSE.txt" $(SolutionDir)x64\
 copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y</Command>
     </PostBuildEvent>
     <PreBuildEvent>
-        <Command>powershell -NoProfile -Command "$date = Get-Date -Format 'yyyyMMdd_HHmmss'; $commit = git rev-parse --short HEAD; Set-Content -Path '$(ProjectDir)resource_build_date.h' -Value ('#define VER_BUILD_DATE \"' + $date + '\"') -Force; Set-Content -Path '$(ProjectDir)resource_build_commit.h' -Value ('#define VER_BUILD_COMMIT \"' + $commit + '\"') -Force;"</Command>
+      <Command>powershell -NoProfile -Command "$date = Get-Date -Format 'yyyyMMdd_HHmmss'; $commit = git rev-parse --short HEAD; Set-Content -Path '$(ProjectDir)resource_build_date.h' -Value ('#define VER_BUILD_DATE \"' + $date + '\"') -Force; Set-Content -Path '$(ProjectDir)resource_build_commit.h' -Value ('#define VER_BUILD_COMMIT \"' + $commit + '\"') -Force;"</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='ReleaseDebug|x64'">
@@ -293,7 +293,7 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
       <Command>powershell -Command "$timestamp = Get-Date -Format 'yyyyMMdd_HHmmss'; $fileName = '$(OutDir)OptiScaler_' + $timestamp + '.7z'; $backupFileName = '$(OutDir)OptiScaler_' + $timestamp + '_Backup.7z'; &amp; '7z.exe' a -t7z $fileName '$(TargetPath)'; &amp; '7z.exe' a -t7z $backupFileName '$(OutDir)$(TargetName).*'"</Command>
     </PostBuildEvent>
     <PreBuildEvent>
-        <Command>powershell -NoProfile -Command "$date = Get-Date -Format 'yyyyMMdd_HHmmss'; $commit = git rev-parse --short HEAD; Set-Content -Path '$(ProjectDir)resource_build_date.h' -Value ('#define VER_BUILD_DATE \"' + $date + '\"') -Force; Set-Content -Path '$(ProjectDir)resource_build_commit.h' -Value ('#define VER_BUILD_COMMIT \"' + $commit + '\"') -Force;"</Command>
+      <Command>powershell -NoProfile -Command "$date = Get-Date -Format 'yyyyMMdd_HHmmss'; $commit = git rev-parse --short HEAD; Set-Content -Path '$(ProjectDir)resource_build_date.h' -Value ('#define VER_BUILD_DATE \"' + $date + '\"') -Force; Set-Content -Path '$(ProjectDir)resource_build_commit.h' -Value ('#define VER_BUILD_COMMIT \"' + $commit + '\"') -Force;"</Command>
     </PreBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -330,6 +330,11 @@ copy NUL "$(SolutionDir)x64\Release\a\!! EXTRACT ALL FILES TO GAME FOLDER !!" /Y
     <ClInclude Include="shaders\output_scaling\fsr1\ffx_fsr1.h" />
     <ClInclude Include="shaders\output_scaling\fsr1\FSR_EASU_Shader_Vk.h" />
     <ClInclude Include="shaders\output_scaling\OS_Vk.h" />
+    <ClInclude Include="shaders\output_scaling\precompile\bcds_bicubic_Shader_Vk.h" />
+    <ClInclude Include="shaders\output_scaling\precompile\bcds_catmull_Shader_Vk.h" />
+    <ClInclude Include="shaders\output_scaling\precompile\bcds_lanczos_Shader_Vk.h" />
+    <ClInclude Include="shaders\output_scaling\precompile\bcds_magc_Shader_Vk.h" />
+    <ClInclude Include="shaders\output_scaling\precompile\bcus_Shader_Vk.h" />
     <ClInclude Include="shaders\rcas\precompile\RCAS_Shader_Vk.h" />
     <ClInclude Include="shaders\rcas\RCAS_Vk.h" />
     <ClInclude Include="shaders\Shader_Dx12.h" />

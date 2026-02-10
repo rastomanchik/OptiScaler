@@ -269,6 +269,9 @@ OS_Dx11::OS_Dx11(std::string InName, ID3D11Device* InDevice, bool InUpsample)
             }
             else
             {
+                InNumThreadsY = 8;
+                InNumThreadsX = 8;
+
                 switch (Config::Instance()->OutputScalingDownscaler.value_or_default())
                 {
                 case 0:
@@ -316,6 +319,9 @@ OS_Dx11::OS_Dx11(std::string InName, ID3D11Device* InDevice, bool InUpsample)
         }
         else
         {
+            InNumThreadsY = 8;
+            InNumThreadsX = 8;
+
             switch (Config::Instance()->OutputScalingDownscaler.value_or_default())
             {
             case 0:

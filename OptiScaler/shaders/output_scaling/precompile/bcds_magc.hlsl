@@ -4,117 +4,101 @@ cbuffer Params : register(b0, space0)
 cbuffer Params : register(b0)
 #endif
 {
-    int _SrcWidth; // Source texture width
-    int _SrcHeight; // Source texture height
-    int _DstWidth; // Destination texture width
-    int _DstHeight; // Destination texture height
-}
+    int _SrcWidth;
+    int _SrcHeight;
+    int _DstWidth;
+    int _DstHeight;
+};
 
 #ifdef VK_MODE
 [[vk::binding(1, 0)]]
 #endif
-Texture2D<float4> InputTexture : register(t0); // Source texture
+Texture2D<float4> InputTexture : register(t0);
 
 #ifdef VK_MODE
 [[vk::binding(2, 0)]]
 #endif
-RWTexture2D<float4> OutputTexture : register(u0); // Downsampled target texture
+RWTexture2D<float4> OutputTexture : register(u0);
 
-// Luminance computation using perceptual weights
-float luminance(float3 color)
+#ifdef VK_MODE
+[[vk::binding(3, 0)]]
+#endif
+SamplerState LinearClampSampler : register(s0);
+
+// Magic Kernel m(x), support [-1.5, +1.5]
+static float MagicKernel(float x)
 {
-    return dot(color, float3(0.2126, 0.7152, 0.0722));
+    float ax = abs(x);
+    if (ax >= 1.5f)
+        return 0.0f;
+
+    if (x <= -0.5f)
+    {
+        float t = x + 1.5f;
+        return 0.5f * t * t;
+    }
+    else if (x < 0.5f)
+    {
+        return 0.75f - x * x;
+    }
+    else
+    {
+        float t = x - 1.5f;
+        return 0.5f * t * t;
+    }
 }
 
-// MAGC Kernel definition
-float magcKernel(float x)
+[numthreads(8, 8, 1)]
+void CSMain(uint3 id : SV_DispatchThreadID)
 {
-    x = abs(x);
-
-    if (x <= 1.0)
-    {
-        return 1.0 - 2.0 * x * x + x * x * x;
-    }
-    else if (x <= 2.0)
-    {
-        return 4.0 - 8.0 * x + 5.0 * x * x - x * x * x;
-    }
-
-    return 0.0;
-}
-
-[numthreads(16, 16, 1)]
-void CSMain(uint3 dispatchThreadID : SV_DispatchThreadID)
-{
-    // Target coordinates in the downsampled texture
-    uint2 targetCoords = dispatchThreadID.xy;
-
-    // Ensure thread is within bounds of the destination texture
-    if (targetCoords.x >= _DstWidth || targetCoords.y >= _DstHeight)
+    uint ox = id.x;
+    uint oy = id.y;
+    if (ox >= (uint) _DstWidth || oy >= (uint) _DstHeight)
         return;
 
-    // Compute scaling factor and source position
-    float2 scale = float2(_SrcWidth, _SrcHeight) / float2(_DstWidth, _DstHeight);
-    float2 sourcePos = float2(targetCoords) * scale;
+    // Scale from dst -> src (texel space, center aligned)
+    float2 dst = float2((float) ox + 0.5f, (float) oy + 0.5f);
+    float2 scale = float2((float) _SrcWidth / (float) _DstWidth,
+                          (float) _SrcHeight / (float) _DstHeight);
 
-    // Base source position and fractional offset
-    int2 sourceBase = int2(sourcePos);
-    float2 fraction = frac(sourcePos);
+    // srcPos in texel space where texel centers are at i+0.5
+    float2 srcPos = dst * scale - 0.5f;
 
-    // Accumulators for color, weight, and luminance
-    float4 color = 0.0;
-    float totalWeight = 0.0;
-    float avgLuminance = 0.0;
+    // We’ll sample a small fixed 3x3 grid around srcPos using bilinear sampling.
+    // Choose offsets in texel space. This covers roughly [-1, 0, +1] around srcPos.
+    // Magic support is ±1.5, so 3x3 is a reasonable fast approximation.
+    static const float offs[3] = { -1.0f, 0.0f, 1.0f };
 
-    // First pass: Compute average luminance in the 4x4 neighborhood
-    for (int dy = -1; dy <= 2; dy++)
+    float2 invSrc = 1.0f / float2((float) _SrcWidth, (float) _SrcHeight);
+
+    float3 acc = 0.0f;
+    float wsum = 0.0f;
+
+    [unroll]
+    for (int j = 0; j < 3; ++j)
     {
-        for (int dx = -1; dx <= 2; dx++)
+        float dy = offs[j];
+        float wy = MagicKernel(dy); // approximate: weight based on integer offset
+
+        [unroll]
+        for (int i = 0; i < 3; ++i)
         {
-            int2 sampleCoords = sourceBase + int2(dx, dy);
-            sampleCoords = clamp(sampleCoords, int2(0, 0), int2(_SrcWidth - 1, _SrcHeight - 1));
+            float dx = offs[i];
+            float wx = MagicKernel(dx);
+            float w = wx * wy;
 
-            float4 sampleColor = InputTexture.Load(int3(sampleCoords, 0));
-            avgLuminance += luminance(sampleColor.rgb);
-        }
-    }
-    avgLuminance /= 16.0; // Normalize luminance by the 4x4 sample count
+            float2 p = srcPos + float2(dx, dy);
+            float2 uv = (p + 0.5f) * invSrc;
 
-    // Second pass: Weighted color accumulation with luminance-aware clamping
-    for (int dy = -1; dy <= 2; dy++)
-    {
-        for (int dx = -1; dx <= 2; dx++)
-        {
-            int2 sampleCoords = sourceBase + int2(dx, dy);
-            sampleCoords = clamp(sampleCoords, int2(0, 0), int2(_SrcWidth - 1, _SrcHeight - 1));
+            float3 s = InputTexture.SampleLevel(LinearClampSampler, uv, 0.0f).rgb;
 
-            float4 sampleColor = InputTexture.Load(int3(sampleCoords, 0));
-
-			// Compute the current luminance of the sample
-            float currentLuminance = luminance(sampleColor.rgb);
-			
-			// Scale the color to match the average luminance if it deviates too much
-            float luminanceDeviation = abs(currentLuminance - avgLuminance);
-            if (luminanceDeviation > 0.5) // Threshold for clamping
-            {
-                float luminanceScale = avgLuminance / max(currentLuminance, 1e-5); // Avoid division by zero
-                sampleColor.rgb *= luminanceScale; // Scale brightness while preserving hue/saturation
-            }
-
-            // MAGC kernel weights
-            float weightX = magcKernel(float(dx) - fraction.x);
-            float weightY = magcKernel(float(dy) - fraction.y);
-            float weight = weightX * weightY;
-
-            // Accumulate weighted color and weight
-            color += sampleColor * weight;
-            totalWeight += weight;
+            acc += s * w;
+            wsum += w;
         }
     }
 
-    // Normalize accumulated color by total weight
-    color /= totalWeight;
+    float invW = (wsum > 0.0f) ? (1.0f / wsum) : 0.0f;
+    float3 outRgb = acc * invW;
 
-    // Output the final downsampled color
-    OutputTexture[dispatchThreadID.xy] = color;
+    OutputTexture[uint2(ox, oy)] = float4(outRgb, 1.0f);
 }

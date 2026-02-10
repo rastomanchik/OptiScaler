@@ -170,7 +170,9 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
     CD3DX12_STATIC_SAMPLER_DESC samplers[1];
 
     // fsr upscaling
-    if (Config::Instance()->OutputScalingUseFsr.value_or_default())
+    // if (Config::Instance()->OutputScalingUseFsr.value_or_default() ||
+    //    (!_upsample && (Config::Instance()->OutputScalingDownscaler.value_or_default() == 0 ||
+    //                    Config::Instance()->OutputScalingDownscaler.value_or_default() == 3)))
     {
         samplers[0].Init(0, D3D12_FILTER_MIN_MAG_MIP_LINEAR);
         samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -180,11 +182,11 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
         rootSigDesc.Desc_1_1.NumStaticSamplers = 1;
         rootSigDesc.Desc_1_1.pStaticSamplers = samplers;
     }
-    else
-    {
-        rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
-        rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
-    }
+    // else
+    //{
+    //     rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
+    //     rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
+    // }
 
     D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Constants));
     auto heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -255,11 +257,15 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
             }
             else
             {
+                InNumThreadsY = 8;
+                InNumThreadsX = 8;
+
                 switch (Config::Instance()->OutputScalingDownscaler.value_or_default())
                 {
                 case 0:
                     computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_bicubic_cso),
                                                                 sizeof(bcds_bicubic_cso));
+
                     break;
 
                 case 1:
@@ -305,6 +311,9 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
         }
         else
         {
+            InNumThreadsY = 8;
+            InNumThreadsX = 8;
+
             switch (Config::Instance()->OutputScalingDownscaler.value_or_default())
             {
             case 0:
