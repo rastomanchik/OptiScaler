@@ -780,12 +780,6 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_GetFeatureRequirements(
         OutSupported->FeatureSupported = NVSDK_NGX_FeatureSupportResult_Supported;
         OutSupported->MinHWArchitecture = 0;
 
-        if (State::Instance().NVNGX_Engine == NVSDK_NGX_ENGINE_TYPE_UNREAL ||
-            State::Instance().gameQuirks & GameQuirk::ForceUnrealEngine)
-        {
-            OutSupported->MinHWArchitecture = NV_GPU_ARCHITECTURE_GT200;
-        }
-
         // Some old windows 10 os version
         strcpy_s(OutSupported->MinOSVersion, "10.0.10240.16384");
         return NVSDK_NGX_Result_Success;

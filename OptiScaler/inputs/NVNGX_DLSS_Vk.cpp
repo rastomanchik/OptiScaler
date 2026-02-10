@@ -339,9 +339,6 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_VULKAN_GetFeatureInstanceExtensionRequi
 {
     LOG_DEBUG("FeatureID: {0}", (UINT) FeatureDiscoveryInfo->FeatureID);
 
-    if (OutExtensionProperties == nullptr)
-        return NVSDK_NGX_Result_FAIL_InvalidParameter;
-
     if (Config::Instance()->DLSSEnabled.value_or_default() && NVNGXProxy::NVNGXModule() != nullptr &&
         NVNGXProxy::VULKAN_GetFeatureInstanceExtensionRequirements() != nullptr)
     {
@@ -426,9 +423,6 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_VULKAN_GetFeatureDeviceExtensionRequire
     uint32_t* OutExtensionCount, VkExtensionProperties** OutExtensionProperties)
 {
     LOG_DEBUG("FeatureID: {0}", (UINT) FeatureDiscoveryInfo->FeatureID);
-
-    if (OutExtensionProperties == nullptr)
-        return NVSDK_NGX_Result_FAIL_InvalidParameter;
 
     if (Config::Instance()->DLSSEnabled.value_or_default() && NVNGXProxy::NVNGXModule() != nullptr &&
         NVNGXProxy::VULKAN_GetFeatureDeviceExtensionRequirements() != nullptr)
@@ -913,7 +907,7 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_VULKAN_EvaluateFeature(VkCommandBuffer 
 
     auto upscaleResult = deviceContext->Evaluate(InCmdList, InParameters);
 
-    if (!upscaleResult && !deviceContext->IsInited() &&
+    if ((!upscaleResult || !deviceContext->IsInited()) &&
         Config::Instance()->VulkanUpscaler.value_or_default() != "fsr22")
     {
         State::Instance().newBackend = "fsr22";
