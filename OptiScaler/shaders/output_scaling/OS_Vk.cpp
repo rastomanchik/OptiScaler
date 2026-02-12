@@ -175,22 +175,13 @@ void OS_Vk::CreateDescriptorSetLayout()
     std::vector<VkDescriptorSetLayoutBinding> bindings;
     VkDescriptorSetLayoutBinding samplerLayoutBinding {};
 
-    if (Config::Instance()->OutputScalingUseFsr.value_or_default())
-    {
-        samplerLayoutBinding.binding = 3;
-        samplerLayoutBinding.descriptorCount = 1;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-        samplerLayoutBinding.pImmutableSamplers = VK_NULL_HANDLE; // &_textureSampler;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+    samplerLayoutBinding.binding = 3;
+    samplerLayoutBinding.descriptorCount = 1;
+    samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    samplerLayoutBinding.pImmutableSamplers = VK_NULL_HANDLE; // &_textureSampler;
+    samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
 
-        bindings = { uboLayoutBinding, sourceLayoutBinding, destLayoutBinding, samplerLayoutBinding };
-    }
-    else
-    {
-        // For non-FSR shaders, use combined image sampler
-        sourceLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        bindings = { uboLayoutBinding, sourceLayoutBinding, destLayoutBinding };
-    }
+    bindings = { uboLayoutBinding, sourceLayoutBinding, destLayoutBinding, samplerLayoutBinding };
 
     VkDescriptorSetLayoutCreateInfo layoutInfo {};
     layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -274,6 +265,7 @@ void OS_Vk::UpdateDescriptorSet(VkCommandBuffer cmdList, int setIndex, VkImageVi
     VkDescriptorImageInfo sourceInfo {};
     sourceInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     sourceInfo.imageView = inputView;
+    sourceInfo.sampler = VK_NULL_HANDLE;
 
     VkWriteDescriptorSet descriptorWriteSource {};
     descriptorWriteSource.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -282,19 +274,7 @@ void OS_Vk::UpdateDescriptorSet(VkCommandBuffer cmdList, int setIndex, VkImageVi
     descriptorWriteSource.dstArrayElement = 0;
     descriptorWriteSource.descriptorCount = 1;
     descriptorWriteSource.pImageInfo = &sourceInfo;
-
-    if (!_upsample)
-    {
-        // For FSR: Sampled image with separate sampler at binding 3
-        sourceInfo.sampler = VK_NULL_HANDLE;
-        descriptorWriteSource.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
-    }
-    else
-    {
-        // For other shaders: Combined image sampler
-        sourceInfo.sampler = _textureSampler;
-        descriptorWriteSource.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-    }
+    descriptorWriteSource.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE;
 
     // 2: Dest
     VkDescriptorImageInfo destInfo {};
@@ -316,25 +296,17 @@ void OS_Vk::UpdateDescriptorSet(VkCommandBuffer cmdList, int setIndex, VkImageVi
     VkDescriptorImageInfo imageInfo {};
     VkWriteDescriptorSet descriptorWriteSampler {};
 
-    if (!_upsample)
-    {
-        imageInfo.sampler = _textureSampler;
+    imageInfo.sampler = _textureSampler;
 
-        descriptorWriteSampler.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWriteSampler.dstSet = descriptorSet;
-        descriptorWriteSampler.dstBinding = 3;
-        descriptorWriteSampler.dstArrayElement = 0;
-        descriptorWriteSampler.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
-        descriptorWriteSampler.descriptorCount = 1;
-        descriptorWriteSampler.pImageInfo = &imageInfo;
+    descriptorWriteSampler.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    descriptorWriteSampler.dstSet = descriptorSet;
+    descriptorWriteSampler.dstBinding = 3;
+    descriptorWriteSampler.dstArrayElement = 0;
+    descriptorWriteSampler.descriptorType = VK_DESCRIPTOR_TYPE_SAMPLER;
+    descriptorWriteSampler.descriptorCount = 1;
+    descriptorWriteSampler.pImageInfo = &imageInfo;
 
-        descriptorWritesBuffer = { descriptorWriteUBO, descriptorWriteSource, descriptorWriteDest,
-                                   descriptorWriteSampler };
-    }
-    else
-    {
-        descriptorWritesBuffer = { descriptorWriteUBO, descriptorWriteSource, descriptorWriteDest };
-    }
+    descriptorWritesBuffer = { descriptorWriteUBO, descriptorWriteSource, descriptorWriteDest, descriptorWriteSampler };
 
     vkUpdateDescriptorSets(_device, static_cast<uint32_t>(descriptorWritesBuffer.size()), descriptorWritesBuffer.data(),
                            0, nullptr);
