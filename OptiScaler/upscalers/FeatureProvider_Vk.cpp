@@ -137,13 +137,13 @@ bool FeatureProvider_Vk::ChangeFeature(std::string upscalerName, VkInstance inst
 
             vkDeviceWaitIdle(device);
 
+            State::Instance().currentFeature = nullptr;
+
             LOG_DEBUG("sleeping before reset of current feature for 1000ms");
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             contextData->feature.reset();
             contextData->feature = nullptr;
-
-            State::Instance().currentFeature = nullptr;
         }
         else
         {

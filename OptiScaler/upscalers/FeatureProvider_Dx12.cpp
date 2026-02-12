@@ -136,6 +136,8 @@ bool FeatureProvider_Dx12::ChangeFeature(std::string upscalerName, ID3D12Device*
 
             dc = nullptr;
 
+            State::Instance().currentFeature = nullptr;
+
             if (State::Instance().gameQuirks & GameQuirk::FastFeatureReset)
             {
                 LOG_DEBUG("sleeping before reset of current feature for 100ms (Fast Feature Reset)");
@@ -149,8 +151,6 @@ bool FeatureProvider_Dx12::ChangeFeature(std::string upscalerName, ID3D12Device*
 
             contextData->feature.reset();
             contextData->feature = nullptr;
-
-            State::Instance().currentFeature = nullptr;
         }
         else
         {

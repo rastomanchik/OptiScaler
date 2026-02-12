@@ -136,13 +136,13 @@ bool FeatureProvider_Dx11::ChangeFeature(std::string upscalerName, ID3D11Device*
             contextData->createParams->Set(NVSDK_NGX_Parameter_OutHeight, dc->DisplayHeight());
             contextData->createParams->Set(NVSDK_NGX_Parameter_PerfQualityValue, dc->PerfQualityValue());
 
+            State::Instance().currentFeature = nullptr;
+
             LOG_TRACE("sleeping before reset of current feature for 1000ms");
             std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
             contextData->feature.reset();
             contextData->feature = nullptr;
-
-            State::Instance().currentFeature = nullptr;
         }
         else
         {
