@@ -23,7 +23,7 @@
 // https://github.com/baldurk/renderdoc/blob/v1.x/renderdoc/driver/dxgi/dxgi_wrapped.cpp
 
 static int scCount = 0;
-static int _frameCounter = 0;
+static UINT64 _frameCounter = 0;
 static double _lastFrameTime = 0;
 static bool _dx11Device = false;
 static bool _dx12Device = false;
@@ -241,8 +241,18 @@ static HRESULT LocalPresent(IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT 
         LOG_DEBUG("Calling fakenvapi");
         if (State::Instance().activeFgOutput == FGOutput::FSRFG || State::Instance().activeFgOutput == FGOutput::XeFG)
         {
+            static UINT64 fgPresentFrame = 0;
             auto fgIsActive = fg != nullptr && fg->IsActive() && !fg->IsPaused();
-            fakenvapi::reportFGPresent(pSwapChain, fgIsActive, _frameCounter % 2);
+
+            if (State::Instance().FGPresentIsCalled)
+            {
+                State::Instance().FGPresentIsCalled = false;
+                fgPresentFrame = _frameCounter;
+            }
+
+            auto isInterpolated = fgIsActive && (_frameCounter - fgPresentFrame) > 0;
+
+            fakenvapi::reportFGPresent(pSwapChain, fgIsActive, isInterpolated);
         }
 
         _frameCounter++;
