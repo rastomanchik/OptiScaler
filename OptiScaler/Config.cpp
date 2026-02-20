@@ -455,6 +455,10 @@ bool Config::Reload(std::filesystem::path iniPath)
             OutputScalingUseFsr.set_from_config(readBool("OutputScaling", "UseFsr"));
             OutputScalingDownscaler.set_from_config(readInt("OutputScaling", "Downscaler"));
 
+            if (OutputScalingDownscaler.has_value() &&
+                (OutputScalingDownscaler.value() < 0 || OutputScalingDownscaler.value() > 6))
+                OutputScalingDownscaler.reset();
+
             if (auto setting = readFloat("OutputScaling", "Multiplier"); setting.has_value())
                 OutputScalingMultiplier.set_from_config(std::clamp(setting.value(), 0.5f, 3.0f));
         }

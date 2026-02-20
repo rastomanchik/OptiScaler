@@ -6,9 +6,12 @@
 #define A_CPU
 // FSR compute shader is from : https://github.com/fholger/vrperfkit/
 
-#include "precompile/BCDS_lanczos_Shader.h"
-#include "precompile/BCDS_catmull_Shader.h"
 #include "precompile/BCDS_bicubic_Shader.h"
+#include "precompile/BCDS_catmull_Shader.h"
+#include "precompile/BCDS_lanczos2_Shader.h"
+#include "precompile/BCDS_lanczos3_Shader.h"
+#include "precompile/BCDS_kaiser2_Shader.h"
+#include "precompile/BCDS_kaiser3_Shader.h"
 #include "precompile/BCDS_magc_Shader.h"
 
 #include "precompile/BCUS_Shader.h"
@@ -17,6 +20,10 @@
 #include "fsr1/FSR_EASU_Shader.h"
 
 #include <Config.h>
+
+static Constants constants {};
+static UpscaleShaderConstants fsr1Constants {};
+static bool constantsInited = false;
 
 #pragma warning(disable : 4244)
 
@@ -75,37 +82,39 @@ bool OS_Dx12::Dispatch(ID3D12Device* InDevice, ID3D12GraphicsCommandList* InCmdL
 
     InDevice->CreateUnorderedAccessView(OutResource, nullptr, &uavDesc, currentHeap.GetUavCPU(0));
 
+    if (!constantsInited)
+    {
+        FsrEasuCon(fsr1Constants.const0, fsr1Constants.const1, fsr1Constants.const2, fsr1Constants.const3,
+                   State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
+                   State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
+                   State::Instance().currentFeature->DisplayWidth(), State::Instance().currentFeature->DisplayHeight());
+
+        constants.srcWidth = State::Instance().currentFeature->TargetWidth();
+        constants.srcHeight = State::Instance().currentFeature->TargetHeight();
+        constants.destWidth = State::Instance().currentFeature->DisplayWidth();
+        constants.destHeight = State::Instance().currentFeature->DisplayHeight();
+
+        constantsInited = true;
+    }
+
     // Create CBV for Constants
     D3D12_CONSTANT_BUFFER_VIEW_DESC cbvDesc = {};
 
     // fsr upscaling
     if (Config::Instance()->OutputScalingUseFsr.value_or_default())
     {
-        UpscaleShaderConstants constants {};
-
-        FsrEasuCon(constants.const0, constants.const1, constants.const2, constants.const3,
-                   State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
-                   inDesc.Width, inDesc.Height, State::Instance().currentFeature->DisplayWidth(),
-                   State::Instance().currentFeature->DisplayHeight());
-
         // Copy the updated constant buffer data to the constant buffer resource
         UINT8* pCBDataBegin;
         CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU
         _constantBuffer->Map(0, &readRange, reinterpret_cast<void**>(&pCBDataBegin));
-        memcpy(pCBDataBegin, &constants, sizeof(constants));
+        memcpy(pCBDataBegin, &fsr1Constants, sizeof(fsr1Constants));
         _constantBuffer->Unmap(0, nullptr);
 
         cbvDesc.BufferLocation = _constantBuffer->GetGPUVirtualAddress();
-        cbvDesc.SizeInBytes = sizeof(constants);
+        cbvDesc.SizeInBytes = sizeof(fsr1Constants);
     }
     else
     {
-        Constants constants {};
-        constants.srcWidth = State::Instance().currentFeature->TargetWidth();
-        constants.srcHeight = State::Instance().currentFeature->TargetHeight();
-        constants.destWidth = State::Instance().currentFeature->DisplayWidth();
-        constants.destHeight = State::Instance().currentFeature->DisplayHeight();
-
         // Copy the updated constant buffer data to the constant buffer resource
         UINT8* pCBDataBegin;
         CD3DX12_RANGE readRange(0, 0); // We do not intend to read from this resource on the CPU
@@ -169,10 +178,6 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
 
     CD3DX12_STATIC_SAMPLER_DESC samplers[1] {};
 
-    // fsr upscaling
-    // if (Config::Instance()->OutputScalingUseFsr.value_or_default() ||
-    //    (!_upsample && (Config::Instance()->OutputScalingDownscaler.value_or_default() == 0 ||
-    //                    Config::Instance()->OutputScalingDownscaler.value_or_default() == 3)))
     {
         samplers[0].Init(0, D3D12_FILTER_MIN_MAG_LINEAR_MIP_POINT);
         samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
@@ -182,11 +187,6 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
         rootSigDesc.Desc_1_1.NumStaticSamplers = 1;
         rootSigDesc.Desc_1_1.pStaticSamplers = samplers;
     }
-    // else
-    //{
-    //     rootSigDesc.Desc_1_1.NumStaticSamplers = 0;
-    //     rootSigDesc.Desc_1_1.pStaticSamplers = nullptr;
-    // }
 
     D3D12_RESOURCE_DESC desc = CD3DX12_RESOURCE_DESC::Buffer(sizeof(Constants));
     auto heapProps = CD3DX12_HEAP_PROPERTIES(D3D12_HEAP_TYPE_UPLOAD);
@@ -269,16 +269,31 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
                     break;
 
                 case 1:
-                    computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_lanczos_cso),
-                                                                sizeof(bcds_lanczos_cso));
-                    break;
-
-                case 2:
                     computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_catmull_cso),
                                                                 sizeof(bcds_catmull_cso));
                     break;
 
+                case 2:
+                    computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_lanczos2_cso),
+                                                                sizeof(bcds_lanczos2_cso));
+                    break;
+
                 case 3:
+                    computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_lanczos3_cso),
+                                                                sizeof(bcds_lanczos3_cso));
+                    break;
+
+                case 4:
+                    computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_kaiser2_cso),
+                                                                sizeof(bcds_kaiser2_cso));
+                    break;
+
+                case 5:
+                    computePsoDesc.CS = CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_kaiser3_cso),
+                                                                sizeof(bcds_kaiser3_cso));
+                    break;
+
+                case 6:
                     computePsoDesc.CS =
                         CD3DX12_SHADER_BYTECODE(reinterpret_cast<const void*>(bcds_magc_cso), sizeof(bcds_magc_cso));
                     break;
@@ -321,14 +336,26 @@ OS_Dx12::OS_Dx12(std::string InName, ID3D12Device* InDevice, bool InUpsample)
                 break;
 
             case 1:
-                _recEncodeShader = OS_CompileShader(downsampleCodeLanczos.c_str(), "CSMain", "cs_5_0");
-                break;
-
-            case 2:
                 _recEncodeShader = OS_CompileShader(downsampleCodeCatmull.c_str(), "CSMain", "cs_5_0");
                 break;
 
+            case 2:
+                _recEncodeShader = OS_CompileShader(downsampleCodeLanczos2.c_str(), "CSMain", "cs_5_0");
+                break;
+
             case 3:
+                _recEncodeShader = OS_CompileShader(downsampleCodeLanczos3.c_str(), "CSMain", "cs_5_0");
+                break;
+
+            case 4:
+                _recEncodeShader = OS_CompileShader(downsampleCodeKaiser2.c_str(), "CSMain", "cs_5_0");
+                break;
+
+            case 5:
+                _recEncodeShader = OS_CompileShader(downsampleCodeKaiser3.c_str(), "CSMain", "cs_5_0");
+                break;
+
+            case 6:
                 _recEncodeShader = OS_CompileShader(downsampleCodeMAGIC.c_str(), "CSMain", "cs_5_0");
                 break;
 

@@ -1,5 +1,6 @@
 #pragma once
 #include "SysUtils.h"
+
 #include <d3d11.h>
 
 class OS_Dx11

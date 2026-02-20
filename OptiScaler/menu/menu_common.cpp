@@ -4736,12 +4736,15 @@ bool MenuCommon::RenderMenu()
 
                                 ImGui::BeginDisabled(_ssUseFsr || _ssRatio < 1.0f);
                                 {
-                                    const char* ds_modes[] = { "Bicubic", "Lanczos", "Catmull-Rom", "MAGC" };
-                                    const std::string ds_modesDesc[] = { "", "", "", "" };
+                                    const char* ds_modes[] = { "Bicubic", "Catmull-Rom", "Lanczos2", "Lanczos3",
+                                                               "Kaiser2", "Kaiser3",     "MAGIC" };
+                                    const std::string ds_modesDesc[] = { "", "", "", "", "", "", "" };
 
-                                    ImGui::PushItemWidth(75.0f * config->MenuScale.value());
+                                    ImGui::PushItemWidth(95.0f * config->MenuScale.value());
+
                                     PopulateCombo("Downscaler", &config->OutputScalingDownscaler, ds_modes,
-                                                  ds_modesDesc, 4);
+                                                  ds_modesDesc, 7);
+
                                     ImGui::PopItemWidth();
                                 }
                                 ImGui::EndDisabled();

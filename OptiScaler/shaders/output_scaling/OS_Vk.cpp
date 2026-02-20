@@ -1,11 +1,16 @@
 #include "pch.h"
 #include "OS_Vk.h"
 
+#include "OS_Common.h"
+
 #define A_CPU
 
-#include "precompile/bcds_lanczos_Shader_Vk.h"
-#include "precompile/BCDS_catmull_Shader_Vk.h"
 #include "precompile/BCDS_bicubic_Shader_Vk.h"
+#include "precompile/BCDS_catmull_Shader_Vk.h"
+#include "precompile/bcds_lanczos2_Shader_Vk.h"
+#include "precompile/bcds_lanczos3_Shader_Vk.h"
+#include "precompile/bcds_kaiser2_Shader_Vk.h"
+#include "precompile/bcds_kaiser3_Shader_Vk.h"
 #include "precompile/BCDS_magc_Shader_Vk.h"
 
 #include "precompile/BCUS_Shader_Vk.h"
@@ -14,6 +19,10 @@
 #include "fsr1/FSR_EASU_Shader_Vk.h"
 
 #include <Config.h>
+
+static Constants constants {};
+static UpscaleShaderConstants fsr1Constants {};
+static bool constantsInited = false;
 
 #pragma warning(disable : 4244)
 
@@ -81,14 +90,26 @@ OS_Vk::OS_Vk(std::string InName, VkDevice InDevice, VkPhysicalDevice InPhysicalD
                 break;
 
             case 1:
-                shaderCode = std::vector<char>(bcds_lanczos_spv, bcds_lanczos_spv + sizeof(bcds_lanczos_spv));
-                break;
-
-            case 2:
                 shaderCode = std::vector<char>(bcds_catmull_spv, bcds_catmull_spv + sizeof(bcds_catmull_spv));
                 break;
 
+            case 2:
+                shaderCode = std::vector<char>(bcds_lanczos2_spv, bcds_lanczos2_spv + sizeof(bcds_lanczos2_spv));
+                break;
+
             case 3:
+                shaderCode = std::vector<char>(bcds_lanczos3_spv, bcds_lanczos3_spv + sizeof(bcds_lanczos3_spv));
+                break;
+
+            case 4:
+                shaderCode = std::vector<char>(bcds_kaiser2_spv, bcds_kaiser2_spv + sizeof(bcds_kaiser2_spv));
+                break;
+
+            case 5:
+                shaderCode = std::vector<char>(bcds_kaiser3_spv, bcds_kaiser3_spv + sizeof(bcds_kaiser3_spv));
+                break;
+
+            case 6:
                 shaderCode = std::vector<char>(bcds_magc_spv, bcds_magc_spv + sizeof(bcds_magc_spv));
                 break;
 
@@ -318,28 +339,30 @@ bool OS_Vk::Dispatch(VkDevice InDevice, VkCommandBuffer InCmdList, VkImageView I
     if (!_init || InDevice == VK_NULL_HANDLE || InCmdList == VK_NULL_HANDLE)
         return false;
 
-    if (Config::Instance()->OutputScalingUseFsr.value_or_default())
+    if (!constantsInited)
     {
-        UpscaleShaderConstants constants {};
-
-        FsrEasuCon(constants.const0, constants.const1, constants.const2, constants.const3,
+        FsrEasuCon(fsr1Constants.const0, fsr1Constants.const1, fsr1Constants.const2, fsr1Constants.const3,
                    State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
                    State::Instance().currentFeature->TargetWidth(), State::Instance().currentFeature->TargetHeight(),
                    State::Instance().currentFeature->DisplayWidth(), State::Instance().currentFeature->DisplayHeight());
 
-        if (_mappedConstantBuffer)
-        {
-            memcpy(_mappedConstantBuffer, &constants, sizeof(UpscaleShaderConstants));
-        }
-    }
-    else
-    {
-        Constants constants {};
         constants.srcWidth = State::Instance().currentFeature->TargetWidth();
         constants.srcHeight = State::Instance().currentFeature->TargetHeight();
         constants.destWidth = State::Instance().currentFeature->DisplayWidth();
         constants.destHeight = State::Instance().currentFeature->DisplayHeight();
 
+        constantsInited = true;
+    }
+
+    if (Config::Instance()->OutputScalingUseFsr.value_or_default())
+    {
+        if (_mappedConstantBuffer)
+        {
+            memcpy(_mappedConstantBuffer, &fsr1Constants, sizeof(UpscaleShaderConstants));
+        }
+    }
+    else
+    {
         if (_mappedConstantBuffer)
         {
             memcpy(_mappedConstantBuffer, &constants, sizeof(Constants));

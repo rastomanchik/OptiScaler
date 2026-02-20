@@ -1,8 +1,8 @@
 #pragma once
 
 #include "SysUtils.h"
+
 #include <shaders/Shader_Vk.h>
-#include "OS_Common.h"
 
 class OS_Vk : public Shader_Vk
 {

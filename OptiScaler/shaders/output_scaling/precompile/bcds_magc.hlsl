@@ -52,19 +52,18 @@ static const float R = 1.5f;
 #define TILE_SIZE 32
 #define MAX_TAPS  12
 
-// Use float4 for better LDS alignment; ignore .w
-groupshared float4 lds_input[TILE_SIZE][TILE_SIZE];
+// De-interleaved R/G/B — no wasted .w, no bank conflicts on consecutive lx reads
+groupshared float lds_R[TILE_SIZE][TILE_SIZE];
+groupshared float lds_G[TILE_SIZE][TILE_SIZE];
+groupshared float lds_B[TILE_SIZE][TILE_SIZE];
 
 [numthreads(8, 8, 1)]
 void CSMain(uint3 id : SV_DispatchThreadID,
             uint3 groupID : SV_GroupID,
             uint3 tid : SV_GroupThreadID)
 {
-    // Early out if group is completely outside (still safe to return early,
-    // but we need LDS load for in-bounds threads; easiest is per-thread after load.)
-    float2 srcDim = float2(_SrcWidth, _SrcHeight);
-    float2 dstDim = float2(_DstWidth, _DstHeight);
-    float2 k = dstDim / srcDim; // k < 1 for downsample
+    // k < 1 for downsample: k = DstDim / SrcDim = 1 / _Scale
+    float2 k = 1.0f / _Scale;
 
     // ----------------------------
     // 1) Compute the source tile footprint for the *whole* 8x8 output block.
@@ -104,7 +103,7 @@ void CSMain(uint3 id : SV_DispatchThreadID,
     tileStart.y = ClampInt(tileStart.y, 0, max(_SrcHeight - tileH, 0));
 
     // ----------------------------
-    // 2) Cooperative load into LDS: only load tileW*tileH texels (not always 32x32).
+    // 2) Cooperative LDS load — de-interleaved into separate R/G/B planes
     // ----------------------------
     uint lane = tid.y * 8u + tid.x;
     uint total = (uint) (tileW * tileH);
@@ -114,12 +113,14 @@ void CSMain(uint3 id : SV_DispatchThreadID,
         int lx = (int) (idx % (uint) tileW);
         int ly = (int) (idx / (uint) tileW);
 
-        int2 srcPos = tileStart + int2(lx, ly);
-        // tileStart already chosen in-bounds, so srcPos is in-bounds; clamp is cheap insurance:
-        srcPos.x = ClampInt(srcPos.x, 0, _SrcWidth - 1);
-        srcPos.y = ClampInt(srcPos.y, 0, _SrcHeight - 1);
+        int2 srcPos;
+        srcPos.x = ClampInt(tileStart.x + lx, 0, _SrcWidth - 1);
+        srcPos.y = ClampInt(tileStart.y + ly, 0, _SrcHeight - 1);
 
-        lds_input[ly][lx] = InputTexture.Load(int3(srcPos, 0));
+        float3 rgb = InputTexture.Load(int3(srcPos, 0)).rgb;
+        lds_R[ly][lx] = rgb.r;
+        lds_G[ly][lx] = rgb.g;
+        lds_B[ly][lx] = rgb.b;
     }
 
     GroupMemoryBarrierWithGroupSync();
@@ -145,12 +146,14 @@ void CSMain(uint3 id : SV_DispatchThreadID,
     x0y0.y = ClampInt(x0y0.y, 0, _SrcHeight - 1);
     x1y1.y = ClampInt(x1y1.y, 0, _SrcHeight - 1);
 
-    int nx = x1y1.x - x0y0.x + 1;
-    int ny = x1y1.y - x0y0.y + 1;
+    int nx = ClampInt(x1y1.x - x0y0.x + 1, 1, MAX_TAPS);
+    int ny = ClampInt(x1y1.y - x0y0.y + 1, 1, MAX_TAPS);
 
-    // Safety: for k>=1/3, nx,ny should be <= 9 for Magic. We keep MAX_TAPS=12 headroom.
-    nx = ClampInt(nx, 1, MAX_TAPS);
-    ny = ClampInt(ny, 1, MAX_TAPS);
+    // Pre-bias: kernel argument for tap i is k*(x0+i+0.5) - o
+    // = k*(x0+0.5) - o  +  k*i
+    // Store base and step separately to replace MADs in the inner loop.
+    float uBase = k.x * ((float) x0y0.x + 0.5f) - o.x;
+    float vBase = k.y * ((float) x0y0.y + 0.5f) - o.y;
 
     float wx[MAX_TAPS];
     float wy[MAX_TAPS];
@@ -160,22 +163,20 @@ void CSMain(uint3 id : SV_DispatchThreadID,
     [unroll]
     for (int i = 0; i < MAX_TAPS; ++i)
     {
+        [flatten]
         if (i < nx)
         {
-            int sx = x0y0.x + i;
-            float u = k.x * ((float) sx + 0.5f) - o.x;
-            float w = MagicKernel(u);
+            float w = MagicKernel(uBase + k.x * (float) i);
             wx[i] = w;
             sumWx += w;
         }
         else
             wx[i] = 0.0f;
 
+        [flatten]
         if (i < ny)
         {
-            int sy = x0y0.y + i;
-            float v = k.y * ((float) sy + 0.5f) - o.y;
-            float w = MagicKernel(v);
+            float w = MagicKernel(vBase + k.y * (float) i);
             wy[i] = w;
             sumWy += w;
         }
@@ -186,8 +187,6 @@ void CSMain(uint3 id : SV_DispatchThreadID,
     float invSumWx = (sumWx > 0.0f) ? (1.0f / sumWx) : 0.0f;
     float invSumWy = (sumWy > 0.0f) ? (1.0f / sumWy) : 0.0f;
 
-    // LDS offsets: since the group tile was built to cover all group pixels' footprints,
-    // these should be within [0..tileW/H). Clamp only for safety, but it should rarely hit.
     int baseLX = ClampInt(x0y0.x - tileStart.x, 0, tileW - nx);
     int baseLY = ClampInt(x0y0.y - tileStart.y, 0, tileH - ny);
 
@@ -202,12 +201,12 @@ void CSMain(uint3 id : SV_DispatchThreadID,
         [unroll]
         for (int i = 0; i < MAX_TAPS; ++i)
         {
+            [flatten]
             if (i < nx)
             {
-                float w = (wx[i] * invSumWx) * wyj;
                 int lx = baseLX + i;
-
-                acc += lds_input[ly][lx].rgb * w;
+                float3 rgb = float3(lds_R[ly][lx], lds_G[ly][lx], lds_B[ly][lx]);
+                acc += rgb * ((wx[i] * invSumWx) * wyj);
             }
         }
     }
