@@ -437,7 +437,7 @@ HRESULT IFeature_Dx11wDx12::CreateDx12Device(D3D_FEATURE_LEVEL InFeatureLevel)
     {
         D3D12_COMMAND_QUEUE_DESC queueDesc = {};
         queueDesc.Flags = D3D12_COMMAND_QUEUE_FLAG_NONE;
-        queueDesc.Type = D3D12_COMMAND_LIST_TYPE_DIRECT;
+        queueDesc.Type = Dx12CommandListType;
 
         // CreateCommandQueue
         result = _dx11on12Device->CreateCommandQueue(&queueDesc, IID_PPV_ARGS(&Dx12CommandQueue));
@@ -449,58 +449,34 @@ HRESULT IFeature_Dx11wDx12::CreateDx12Device(D3D_FEATURE_LEVEL InFeatureLevel)
         }
     }
 
-    if (Dx12CommandAllocator[0] == nullptr)
+    for (size_t i = 0; i < 2; i++)
     {
-        result = _dx11on12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                         IID_PPV_ARGS(&Dx12CommandAllocator[0]));
-
-        if (result != S_OK)
+        if (Dx12CommandAllocator[i] == nullptr)
         {
-            LOG_ERROR("CreateCommandAllocator error: {0:x}", result);
-            return E_NOINTERFACE;
-        }
-    }
+            result =
+                _dx11on12Device->CreateCommandAllocator(Dx12CommandListType, IID_PPV_ARGS(&Dx12CommandAllocator[i]));
 
-    if (Dx12CommandAllocator[1] == nullptr)
-    {
-        result = _dx11on12Device->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT,
-                                                         IID_PPV_ARGS(&Dx12CommandAllocator[1]));
-
-        if (result != S_OK)
-        {
-            LOG_ERROR("CreateCommandAllocator error: {0:x}", result);
-            return E_NOINTERFACE;
-        }
-    }
-
-    if (Dx12CommandList[0] == nullptr && Dx12CommandAllocator[0] != nullptr)
-    {
-        // CreateCommandList
-        result = _dx11on12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Dx12CommandAllocator[0], nullptr,
-                                                    IID_PPV_ARGS(&Dx12CommandList[0]));
-
-        if (result != S_OK)
-        {
-            LOG_ERROR("CreateCommandList error: {0:x}", result);
-            return E_NOINTERFACE;
+            if (result != S_OK)
+            {
+                LOG_ERROR("CreateCommandAllocator error: {:X}", result);
+                return E_NOINTERFACE;
+            }
         }
 
-        Dx12CommandList[0]->Close();
-    }
-
-    if (Dx12CommandList[1] == nullptr && Dx12CommandAllocator[1] != nullptr)
-    {
-        // CreateCommandList
-        result = _dx11on12Device->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, Dx12CommandAllocator[1], nullptr,
-                                                    IID_PPV_ARGS(&Dx12CommandList[1]));
-
-        if (result != S_OK)
+        if (Dx12CommandList[i] == nullptr && Dx12CommandAllocator[i] != nullptr)
         {
-            LOG_ERROR("CreateCommandList error: {0:x}", result);
-            return E_NOINTERFACE;
-        }
+            // CreateCommandList
+            result = _dx11on12Device->CreateCommandList(0, Dx12CommandListType, Dx12CommandAllocator[i], nullptr,
+                                                        IID_PPV_ARGS(&Dx12CommandList[i]));
 
-        Dx12CommandList[1]->Close();
+            if (result != S_OK)
+            {
+                LOG_ERROR("CreateCommandList error: {:X}", result);
+                return E_NOINTERFACE;
+            }
+
+            Dx12CommandList[i]->Close();
+        }
     }
 
     if (Dx12Fence == nullptr)

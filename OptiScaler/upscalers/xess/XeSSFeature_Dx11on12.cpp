@@ -27,6 +27,7 @@ bool XeSSFeatureDx11on12::Init(ID3D11Device* InDevice, ID3D11DeviceContext* InCo
 
     Device = InDevice;
     DeviceContext = InContext;
+    Dx12CommandListType = D3D12_COMMAND_LIST_TYPE_DIRECT;
 
     _baseInit = false;
 

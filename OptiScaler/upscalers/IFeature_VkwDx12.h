@@ -66,6 +66,7 @@ class IFeature_VkwDx12 : public virtual IFeature_Vk
     ID3D12GraphicsCommandList* Dx12CommandList[2] = { nullptr, nullptr };
     ID3D12Fence* Dx12Fence = nullptr;
     HANDLE Dx12FenceEvent = nullptr;
+    D3D12_COMMAND_LIST_TYPE Dx12CommandListType = D3D12_COMMAND_LIST_TYPE_COMPUTE;
 
     // Shared resources
     VK_TEXTURE2D_RESOURCE_C vkColor = {};
