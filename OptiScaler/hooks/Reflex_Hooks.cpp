@@ -422,7 +422,6 @@ void ReflexHooks::setFPSLimit(float fps)
             fakenvapi::ForNvidia_SetSleepMode(_lastSleepDev, &temp);
         else
             o_NvAPI_D3D_SetSleepMode(_lastSleepDev, &temp);
-
     }
 
     if (_lastVkSleepDev != nullptr)
