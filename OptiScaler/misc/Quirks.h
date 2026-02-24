@@ -367,8 +367,12 @@ static const QuirkEntry quirkTable[] = {
                 GameQuirk::VulkanDLSSBarrierFixup),
 
     // Indiana Jones and the Great Circle
-    // VK Ext spoof needed for unlocking DLSS and DLSS-FG
+    // VK Ext spoof needed for unlocking DLSS and DLSS-FG (atleast for AMD)
     QUIRK_ENTRY("thegreatcircle.exe", GameQuirk::EnableVulkanExtensionSpoofing, GameQuirk::DisableDxgiSpoofing),
+
+    // DOOM: The Dark Ages
+    // Disabled Dxgi spoofing to avoid crash on boot
+    QUIRK_ENTRY("doomthedarkages.exe", GameQuirk::DisableDxgiSpoofing),
 
 };
 
