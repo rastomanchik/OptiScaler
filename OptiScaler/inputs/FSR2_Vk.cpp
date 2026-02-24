@@ -134,21 +134,25 @@ static VkFormat ffxApiGetVkFormat(uint32_t fmt)
 static bool CreateIVandNVRes(FfxResource resource, VkImageView* imageView, NVSDK_NGX_Resource_VK* nvResource,
                              bool isUAV = false, bool isDepth = false)
 {
+    auto sf = ffxApiGetVkFormat(resource.description.format);
+
+    // This is for WWZ depth issue
+    if (sf == VK_FORMAT_UNDEFINED && State::Instance().gameQuirks & GameQuirk::ForceDepthD32S8)
+        sf = VK_FORMAT_D32_SFLOAT;
+
     VkImageViewCreateInfo createInfo {};
     createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     createInfo.image = (VkImage) resource.resource;
     createInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    createInfo.format = ffxApiGetVkFormat(resource.description.format);
+    createInfo.format = sf;
     createInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     createInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
     createInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
     createInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
 
-    createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_NONE;
+    createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
     if (resource.isDepth || isDepth)
-        createInfo.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_DEPTH_BIT;
-    else
-        createInfo.subresourceRange.aspectMask |= VK_IMAGE_ASPECT_COLOR_BIT;
+        createInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
 
     createInfo.subresourceRange.baseMipLevel = 0;
     createInfo.subresourceRange.levelCount = 1;
@@ -169,7 +173,7 @@ static bool CreateIVandNVRes(FfxResource resource, VkImageView* imageView, NVSDK
     (*nvResource).Resource.ImageViewInfo.SubresourceRange = createInfo.subresourceRange;
     (*nvResource).Resource.ImageViewInfo.Height = resource.description.height;
     (*nvResource).Resource.ImageViewInfo.Width = resource.description.width;
-    (*nvResource).Resource.ImageViewInfo.Format = ffxApiGetVkFormat(resource.description.format);
+    (*nvResource).Resource.ImageViewInfo.Format = sf;
     (*nvResource).ReadWrite = isUAV;
 
     return true;

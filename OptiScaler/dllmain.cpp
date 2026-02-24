@@ -1318,6 +1318,12 @@ static void printQuirks(flag_set<GameQuirk>& quirks)
         state->detectedQuirks.push_back("Disable fakenvapi");
     }
 
+    if (quirks & GameQuirk::ForceDepthD32S8)
+    {
+        spdlog::info("Quirk: Force depth as D32S8");
+        state->detectedQuirks.push_back("Disable Force depth as D32S8");
+    }
+
     return;
 }
 

@@ -55,6 +55,7 @@ enum class GameQuirk : uint64_t
     SkipD3D11FeatureLevelElevation,
     CreateD3D12DeviceForLuma,
     ForceCreateD3D12Device,
+    ForceDepthD32S8,
     // Don't forget to add the new entry to printQuirks
     _
 };
@@ -356,7 +357,7 @@ static const QuirkEntry quirkTable[] = {
 
     // World War Z
     QUIRK_ENTRY("wwzretail.exe", GameQuirk::UseFsr2VulkanInputs, GameQuirk::EnableVulkanExtensionSpoofing,
-                GameQuirk::DisableDxgiSpoofing),
+                GameQuirk::DisableDxgiSpoofing, GameQuirk::ForceDepthD32S8),
 
     // Baldur's Gate 3
     // VK Ext spoof needed for FSR3
