@@ -28,7 +28,7 @@
     for (auto& singleChangeBackend : State::Instance().changeBackend)                                                  \
         singleChangeBackend.second = true;
 
-constexpr float fontSize = 14.0f; // just changing this doesn't make other elements scale ideally
+constexpr float fontSize = 14.0f; // просто изменение этого не масштабирует другие элементы идеально
 static ImVec2 overlaySize(0.0f, 0.0f);
 static ImVec2 overlayPosition(-1000.0f, -1000.0f);
 static bool _hdrTonemapApplied = false;
@@ -51,72 +51,72 @@ static ImVec2 splashPosition(-1000.0f, -1000.0f);
 static ImVec2 splashSize(0.0f, 0.0f);
 static double splashStart = 0.0;
 static double splashLimit = 0.0;
-static std::vector<std::string> splashText = { "Cope smarter, not harder",
-                                               "Coping is strong with this one...",
-                                               "This is where the fun begins...",
-                                               "Got any more of them scalers?...",
-                                               "Fake pixels and even faker frames...",
-                                               "Fake frames, get your fake frames...",
-                                               "I'm here to kick pixels and chew frames...",
-                                               "I find your lack of supersampling disturbing...",
-                                               "Frame by frame, I scale-up!",
-                                               "Resistance is futile. Your pixels will be upscaled.",
-                                               "I've got 99 problems, but low-res ain't one.",
-                                               "It's over, DLSS, I have the higher ground!",
-                                               "This isn't the resolution you're looking for.",
-                                               "To infinity and beyond... with ray tracing off.",
-                                               "I have a bad feeling about this frame pacing.",
-                                               "It's Dangerous to Go Alone-Take This Upscaler",
-                                               "Upscaled beyond recognition.",
-                                               "Trust the process. Ignore the shimmer.",
-                                               "Real fake frames. Certified.",
-                                               "The illusion of performance, perfected.",
-                                               "This upscaler belongs in a museum!",
-                                               "Because native rendering is overrated.",
-                                               "The more you upscaler, the more you save",
-                                               "It's never too late to buy a better GPU",
-                                               "We don't need real pixels where we're going",
-                                               "Did you know that Intel released XeFG for everyone?",
-                                               "MFG totally works with Nukem's 100%% no scam",
-                                               "Some of those pixels might even be real!",
-                                               "Just don't look too closely at the image",
-                                               "Even supports \"software\" XeSS!",
+static std::vector<std::string> splashText = { "Справляйся умнее, не тяжелее",
+                                               "Мастерство сильно в этом...",
+                                               "Вот здесь начинается веселье...",
+                                               "Есть ещё масштабировщики?...",
+                                               "Поддельные пиксели и ещё более поддельные кадры...",
+                                               "Поддельные кадры, берите поддельные кадры...",
+                                               "Я здесь, чтобы пинать пиксели и жевать кадры...",
+                                               "Я нахожу вашу нехватку суперсэмплирования тревожной...",
+                                               "Кадр за кадром, я масштабирую!",
+                                               "Сопротивление бесполезно. Ваши пиксели будут масштабированы.",
+                                               "У меня 99 проблем, но низкое разрешение не одна из них.",
+                                               "Всё кончено, DLSS, у меня высокое положение!",
+                                               "Это не то разрешение, которое вы ищете.",
+                                               "В бесконечность и дальше... с отключённой трассировкой лучей.",
+                                               "У меня плохое предчувствие по поводу этого темпа кадров.",
+                                               "Опасно идти одному - возьми этот масштабировщик",
+                                               "Масштабировано до неузнаваемости.",
+                                               "Доверься процессу. Игнорируй мерцание.",
+                                               "Настоящие поддельные кадры. Сертифицировано.",
+                                               "Иллюзия производительности, совершенствованная.",
+                                               "Этот масштабировщик принадлежит музею!",
+                                               "Потому что естественный рендеринг переоценен.",
+                                               "Чем больше масштабируешь, тем больше сохраняешь",
+                                               "Никогда не поздно купить лучший GPU",
+                                               "Нам не нужны настоящие пиксели, куда мы идём",
+                                               "Знаете ли вы, что Intel выпустил XeFG для всех?",
+                                               "MFG полностью работает с Nukem's 100%% без мошенничества",
+                                               "Некоторые из этих пикселей могут быть настоящими!",
+                                               "Просто не смотри слишком внимательно на изображение",
+                                               "Даже поддерживает \"программный\" XeSS!",
                                                "It’s too blurry to go alone, take RCAS with you",
-                                               "Thanks nitec, back to you nitec",
-                                               "Tested and approved by By-U",
-                                               "0.8 was an inside job",
-                                               "FSR4 DP4a wenETA, AMD plz",
-                                               "OptiCopers, assemble!",
-                                               "The Way It's Meant To Be Upscaled",
-                                               "Your game may not even crash today",
-                                               "Expanded and Enhanced",
-                                               "It's only my 5th crash today",
-                                               "Latency with FG? But I have good internet",
-                                               "Console peasants can't do that",
-                                               "Hope you don't have a good eyesight",
-                                               "Such an aggressive upscaling? A bold move",
-                                               "I almost don't feel the input lag",
-                                               "And that's how you get to 60 FPS",
-                                               "Together We Upscale",
-                                               "For upscalers, by upscalers",
-                                               "Opti Sports, it's in the sampling",
-                                               "Render in your world. Upscale in ours",
-                                               "All your pixels are belong to us",
-                                               "Upscaling for the masses, not the classes",
-                                               "Generating discord since 2023",
-                                               "Enabling DLSS since 2023",
-                                               "[Reducted] never looked better",
-                                               "Free and always free",
-                                               "Getting unshackled from green chains in progress...",
-                                               "Who's Nukem anyway?",
-                                               "Compiling shaders... ETA: 05h:49m",
-                                               "Did you really just pay 70€ for this game?!",
-                                               "Guess who forgot about a nullptr check again",
-                                               "AI can't outslop this",
-                                               "Guess we're pre-alpha build demos now",
-                                               "New app on the block - TH",
-                                               "One more stutter and I might lose it",
-                                               "<Your funny text goes here>" };
+                                               "Спасибо nitec, обратно тебе nitec",
+                                               "Протестировано и одобрено By-U",
+                                               "0.8 была внутренней работой",
+                                               "FSR4 DP4a wenETA, AMD пожалуйста",
+                                               "OptiCopers, соберитесь!",
+                                               "Способ, которым это должно быть масштабировано",
+                                               "Ваша игра может даже не вылетить сегодня",
+                                               "Расширенно и улучшенно",
+                                               "Это только мой 5-й крах за день",
+                                               "Задержка с FG? Но у меня хороший интернет",
+                                               "Консольные крестьяне не могут это делать",
+                                               "Надеюсь, у тебя не хорошее зрение",
+                                               "Такое агрессивное масштабирование? Смелый ход",
+                                               "Я почти не чувствую задержку ввода",
+                                               "И вот как ты достигаешь 60 FPS",
+                                               "Вместе мы масштабируем",
+                                               "Для масштабировщиков, от масштабировщиков",
+                                               "Opti Sports, это в сэмплировании",
+                                               "Рендеринг в твоём мире. Масштабирование в нашем",
+                                               "Все ваши пиксели принадлежат нам",
+                                               "Масштабирование для масс, а не для классов",
+                                               "Создание раздора с 2023",
+                                               "Включение DLSS с 2023",
+                                               "[Удалено] никогда не выглядело лучше",
+                                               "Бесплатно и всегда бесплатно",
+                                               "Освобождение от зелёных цепей в процессе...",
+                                               "Кто такой Nukem вообще?",
+                                               "Компиляция шейдеров... ETA: 05ч:49м",
+                                               "Ты действительно только что заплатил 70€ за эту игру?!",
+                                               "Угадай, кто снова забыл о проверке nullptr",
+                                               "ИИ не может превзойти это",
+                                               "Похоже, мы теперь демо сборки предальфа",
+                                               "Новое приложение - TH",
+                                               "Ещё одна заикание и я могу потерять это",
+                                               "<Ваш смешной текст здесь>" };
 
 static ImVec2 updateNoticePosition(-1000.0f, -1000.0f);
 static ImVec2 updateNoticeSize(0.0f, 0.0f);
@@ -3510,7 +3510,7 @@ bool MenuCommon::RenderMenu()
 
                         ImGui::Spacing();
                         ImGui::Spacing();
-                        if (auto ch = ScopedCollapsingHeader("Advanced FSR FG Settings"); ch.IsHeaderOpen())
+                        if (auto ch = ScopedCollapsingHeader("Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
                         {
                             ScopedIndent indent {};
                             ImGui::Spacing();
@@ -4117,7 +4117,7 @@ bool MenuCommon::RenderMenu()
                             }
 
                             ImGui::Spacing();
-                            if (ImGui::TreeNode("Syncing Settings"))
+                            if (ImGui::TreeNode("Настройки синхронизации."))
                             {
                                 bool useMutexForPresent = config->FGUseMutexForSwapchain.value_or_default();
                                 if (ImGui::Checkbox("FG Use Mutex for Present", &useMutexForPresent))
@@ -4134,17 +4134,17 @@ bool MenuCommon::RenderMenu()
                     }
                     else if (currentFeature == nullptr || currentFeature->IsFrozen())
                     {
-                        ImGui::Text("Upscaler is not active"); // Probably never will be visible
+                        ImGui::Text("Upscaler не активен!"); // Probably never will be visible
                     }
                     else if (state.activeFgOutput == FGOutput::FSRFG && !FfxApiProxy::IsFGReady())
                     {
                         ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f },
-                                           "amd_fidelityfx_dx12.dll is missing!"); // Probably never will be visible
+                                           "amd_fidelityfx_dx12.dll отсутствует!"); // Probably never will be visible
                     }
                     else if (state.activeFgOutput == FGOutput::XeFG && XeFGProxy::Module() == nullptr)
                     {
                         ImGui::TextColored({ 1.0f, 0.0f, 0.0f, 1.0f },
-                                           "libxess_fg.dll is missing!"); // Probably never will be visible
+                                           "libxess_fg.dll отсутствует"); // Probably never will be visible
                     }
                 }
 
@@ -5872,7 +5872,7 @@ void MenuCommon::Init(HWND InHwnd, bool isUWP)
 
     LOG_DEBUG("Handle: {0:X}", (size_t) _handle);
 
-    // Setup Dear ImGui context
+    // Установка контекста Dear ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -5913,7 +5913,7 @@ void MenuCommon::Init(HWND InHwnd, bool isUWP)
         ImFontAtlas* atlas = io.Fonts;
         atlas->Clear();
 
-        // This automatically becomes the next default font
+        // Это автоматически становится следующим шрифтом по умолчанию
         ImFontConfig fontConfig;
 
         if (Config::Instance()->TTFFontPath.has_value())
