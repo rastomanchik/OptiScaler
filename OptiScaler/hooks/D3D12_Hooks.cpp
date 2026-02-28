@@ -65,6 +65,18 @@ static bool _creatingD3D12Device = false;
 static bool _d3d12Captured = false;
 static LUID _lastAdapterLuid = {};
 
+typedef void (*PFN_SetComputeRootSignature)(ID3D12GraphicsCommandList* commandList,
+                                            ID3D12RootSignature* pRootSignature);
+
+static PFN_SetComputeRootSignature o_SetComputeRootSignature = nullptr;
+static PFN_SetComputeRootSignature o_SetGraphicRootSignature = nullptr;
+
+static ankerl::unordered_dense::map<ID3D12GraphicsCommandList*, ID3D12RootSignature*> computeSignatures;
+static ankerl::unordered_dense::map<ID3D12GraphicsCommandList*, ID3D12RootSignature*> graphicSignatures;
+static bool isUpscalerActive = false;
+static std::shared_mutex computeSigatureMutex;
+static std::shared_mutex graphSigatureMutex;
+
 // Intel Atomic Extension
 struct UE_D3D12_RESOURCE_DESC
 {
@@ -230,6 +242,94 @@ static void ApplySamplerOverrides(D3D12_STATIC_SAMPLER_DESC1& samplerDesc)
         samplerDesc.Filter = UpgradeToAF(samplerDesc.Filter);
         samplerDesc.MaxAnisotropy = Config::Instance()->AnisotropyOverride.value();
     }
+}
+
+static void hkSetComputeRootSignature(ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* pRootSignature)
+{
+    if (Config::Instance()->RestoreComputeSignature.value_or_default() && !isUpscalerActive && commandList != nullptr &&
+        pRootSignature != nullptr)
+    {
+        std::unique_lock<std::shared_mutex> lock(computeSigatureMutex);
+        computeSignatures.insert_or_assign(commandList, pRootSignature);
+    }
+
+    o_SetComputeRootSignature(commandList, pRootSignature);
+}
+
+static void hkSetGraphicRootSignature(ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* pRootSignature)
+{
+    if (Config::Instance()->RestoreGraphicSignature.value_or_default() && !isUpscalerActive && commandList != nullptr &&
+        pRootSignature != nullptr)
+    {
+        std::unique_lock<std::shared_mutex> lock(graphSigatureMutex);
+        graphicSignatures.insert_or_assign(commandList, pRootSignature);
+    }
+
+    o_SetGraphicRootSignature(commandList, pRootSignature);
+}
+
+static void HookToCommandList(ID3D12Device* InDevice)
+{
+    if (o_SetComputeRootSignature != nullptr || o_SetGraphicRootSignature != nullptr)
+        return;
+
+    ID3D12GraphicsCommandList* commandList = nullptr;
+    ID3D12CommandAllocator* commandAllocator = nullptr;
+
+    if (InDevice->CreateCommandAllocator(D3D12_COMMAND_LIST_TYPE_DIRECT, IID_PPV_ARGS(&commandAllocator)) == S_OK)
+    {
+        if (InDevice->CreateCommandList(0, D3D12_COMMAND_LIST_TYPE_DIRECT, commandAllocator, nullptr,
+                                        IID_PPV_ARGS(&commandList)) == S_OK)
+        {
+            // Get the vtable pointer
+            PVOID* pVTable = *(PVOID**) commandList;
+
+            o_SetComputeRootSignature = (PFN_SetComputeRootSignature) pVTable[29];
+            o_SetGraphicRootSignature = (PFN_SetComputeRootSignature) pVTable[30];
+
+            if (o_SetComputeRootSignature != nullptr || o_SetGraphicRootSignature != nullptr)
+            {
+                DetourTransactionBegin();
+                DetourUpdateThread(GetCurrentThread());
+
+                if (o_SetComputeRootSignature != nullptr)
+                    DetourAttach(&(PVOID&) o_SetComputeRootSignature, hkSetComputeRootSignature);
+
+                if (o_SetGraphicRootSignature != nullptr)
+                    DetourAttach(&(PVOID&) o_SetGraphicRootSignature, hkSetGraphicRootSignature);
+
+                LOG_DEBUG("Hooked SetRootSignature functions");
+
+                DetourTransactionCommit();
+            }
+
+            commandList->Close();
+            commandList->Release();
+        }
+
+        commandAllocator->Reset();
+        commandAllocator->Release();
+    }
+}
+
+static void UnhookAll()
+{
+    DetourTransactionBegin();
+    DetourUpdateThread(GetCurrentThread());
+
+    if (o_SetComputeRootSignature != nullptr)
+    {
+        DetourDetach(&(PVOID&) o_SetComputeRootSignature, hkSetComputeRootSignature);
+        o_SetComputeRootSignature = nullptr;
+    }
+
+    if (o_SetGraphicRootSignature != nullptr)
+    {
+        DetourDetach(&(PVOID&) o_SetGraphicRootSignature, hkSetGraphicRootSignature);
+        o_SetGraphicRootSignature = nullptr;
+    }
+
+    DetourTransactionCommit();
 }
 
 static HRESULT hkD3D12CreateDevice(IDXGIAdapter* pAdapter, D3D_FEATURE_LEVEL MinimumFeatureLevel, REFIID riid,
@@ -922,6 +1022,8 @@ static void HookToDevice(ID3D12Device* InDevice)
         DetourTransactionCommit();
     }
 
+    HookToCommandList(InDevice);
+
     if (State::Instance().activeFgInput == FGInput::Upscaler)
         ResTrack_Dx12::HookDevice(InDevice);
 }
@@ -1046,6 +1148,36 @@ void D3D12Hooks::Unhook()
     }
 
     DetourTransactionCommit();
+}
+
+void D3D12Hooks::SetRootSignatureTracking(bool enable) { isUpscalerActive = !enable; }
+
+void D3D12Hooks::RestoreComputeRootSignature(ID3D12GraphicsCommandList* cmdList)
+{
+    if (Config::Instance()->RestoreComputeSignature.value_or_default() && computeSignatures.contains(cmdList))
+    {
+        auto signature = computeSignatures[cmdList];
+        LOG_TRACE("Restore ComputeRootSig: {:X}, for CmdList: {:X}", (UINT64) signature, (UINT64) cmdList);
+        o_SetComputeRootSignature(cmdList, signature);
+    }
+    else if (Config::Instance()->RestoreComputeSignature.value_or_default())
+    {
+        LOG_TRACE("Can't restore ComputeRootSig for CmdList: {:X}", (UINT64) cmdList);
+    }
+}
+
+void D3D12Hooks::RestoreGraphicsRootSignature(ID3D12GraphicsCommandList* cmdList)
+{
+    if (Config::Instance()->RestoreGraphicSignature.value_or_default() && graphicSignatures.contains(cmdList))
+    {
+        auto signature = graphicSignatures[cmdList];
+        LOG_TRACE("Restore GraphicsRootSig: {:X}, for CmdList: {:X}", (UINT64) signature, (UINT64) cmdList);
+        o_SetGraphicRootSignature(cmdList, signature);
+    }
+    else if (Config::Instance()->RestoreGraphicSignature.value_or_default())
+    {
+        LOG_TRACE("Can't restore GraphicsRootSig for CmdList: {:X}", (UINT64) cmdList);
+    }
 }
 
 void D3D12Hooks::HookDevice(ID3D12Device* device) { HookToDevice(device); }

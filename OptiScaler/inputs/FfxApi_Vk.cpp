@@ -22,6 +22,8 @@ static VkPhysicalDevice _vkPhysicalDevice = nullptr;
 static PFN_vkGetDeviceProcAddr _vkDeviceProcAddress = nullptr;
 static bool _nvnxgInited = false;
 static float qualityRatios[] = { 1.0f, 1.5f, 1.7f, 2.0f, 3.0f };
+static size_t _contextCounter = 0x00001ee7;
+
 static VkImageView depthImageView = nullptr;
 static VkImageView expImageView = nullptr;
 static VkImageView biasImageView = nullptr;
@@ -38,6 +40,41 @@ static NVSDK_NGX_Resource_VK mvNVRes {};
 static NVSDK_NGX_Resource_VK outputNVRes {};
 static NVSDK_NGX_Resource_VK fsrReactiveNVRes {};
 static NVSDK_NGX_Resource_VK fsrTransparencyNVRes {};
+
+static float halton(int32_t index, int32_t base)
+{
+    float f = 1.0f, result = 0.0f;
+
+    for (int32_t currentIndex = index; currentIndex > 0;)
+    {
+
+        f /= (float) base;
+        result = result + f * (float) (currentIndex % base);
+        currentIndex = (uint32_t) (floorf((float) (currentIndex) / (float) (base)));
+    }
+
+    return result;
+}
+
+static bool ffxGetJitterOffsetLocal(float* outX, float* outY, int32_t index, int32_t phaseCount)
+{
+    if (outX == nullptr)
+        return false;
+
+    if (outY == nullptr)
+        return false;
+
+    if (phaseCount <= 0)
+        return false;
+
+    const float x = halton((index % phaseCount) + 1, 2) - 0.5f;
+    const float y = halton((index % phaseCount) + 1, 3) - 0.5f;
+
+    *outX = x;
+    *outY = y;
+
+    return true;
+}
 
 static VkFormat ffxApiGetVkFormat(uint32_t fmt)
 {
@@ -324,15 +361,6 @@ ffxReturnCode_t ffxCreateContext_Vk(ffxContext* context, ffxCreateContextDescHea
 
     LOG_DEBUG("type: {:X}", desc->type);
 
-    auto ffxApiResult = FfxApiProxy::VULKAN_CreateContext()(context, desc, memCb);
-
-    if (ffxApiResult != FFX_API_RETURN_OK)
-    {
-        LOG_ERROR("D3D12_CreateContext error: {:X} ({})", (UINT) ffxApiResult,
-                  FfxApiProxy::ReturnCodeToString(ffxApiResult));
-        return ffxApiResult;
-    }
-
     bool upscaleContext = false;
     ffxApiHeader* header = desc;
     ffxCreateContextDescUpscale* createDesc = nullptr;
@@ -356,8 +384,16 @@ ffxReturnCode_t ffxCreateContext_Vk(ffxContext* context, ffxCreateContextDescHea
 
     } while (header != nullptr);
 
-    if (!upscaleContext)
-        return ffxApiResult;
+    if (!upscaleContext || Config::Instance()->EnableHotSwapping.value_or_default())
+    {
+        auto ffxApiResult = FfxApiProxy::VULKAN_CreateContext()(context, desc, memCb);
+
+        LOG_DEBUG("Vulkan_CreateContext result: {:X} ({}), context: {:X}", (UINT) ffxApiResult,
+                  FfxApiProxy::ReturnCodeToString(ffxApiResult), (size_t) *context);
+
+        if (!upscaleContext)
+            return ffxApiResult;
+    }
 
     if (!State::Instance().NvngxVkInited)
     {
@@ -404,6 +440,12 @@ ffxReturnCode_t ffxCreateContext_Vk(ffxContext* context, ffxCreateContextDescHea
         _nvnxgInited = true;
     }
 
+    if (!Config::Instance()->EnableHotSwapping.value_or_default())
+    {
+        *context = (ffxContext) ++_contextCounter;
+        LOG_INFO("Custom context index:{}", _contextCounter);
+    }
+
     NVSDK_NGX_Parameter* params = nullptr;
 
     if (NVSDK_NGX_VULKAN_GetCapabilityParameters(&params) != NVSDK_NGX_Result_Success)
@@ -424,10 +466,15 @@ ffxReturnCode_t ffxCreateContext_Vk(ffxContext* context, ffxCreateContextDescHea
 
 ffxReturnCode_t ffxDestroyContext_Vk(ffxContext* context, const ffxAllocationCallbacks* memCb)
 {
-    if (context == nullptr)
-        return FFX_API_RETURN_ERROR_PARAMETER;
+    LOG_DEBUG("");
+
+    if (context == nullptr || *context == nullptr)
+        return FFX_API_RETURN_OK;
 
     LOG_DEBUG("context: {:X}", (size_t) *context);
+
+    bool upscalerContext =
+        _contexts.contains(*context) || _initParams.contains(*context) || _nvParams.contains(*context);
 
     if (_contexts.contains(*context))
         NVSDK_NGX_VULKAN_ReleaseFeature(_contexts[*context]);
@@ -436,10 +483,20 @@ ffxReturnCode_t ffxDestroyContext_Vk(ffxContext* context, const ffxAllocationCal
     _nvParams.erase(*context);
     _initParams.erase(*context);
 
+    if (upscalerContext && !Config::Instance()->EnableHotSwapping.value_or_default())
+        return FFX_API_RETURN_OK;
+
+    if (!State::Instance().isShuttingDown && upscalerContext &&
+        Config::Instance()->EnableHotSwapping.value_or_default())
+    {
+        auto cdResult = FfxApiProxy::VULKAN_DestroyContext()(context, memCb);
+        LOG_INFO("result: {:X}", (UINT) cdResult);
+        return FFX_API_RETURN_OK;
+    }
+
     auto cdResult = FfxApiProxy::VULKAN_DestroyContext()(context, memCb);
     LOG_INFO("result: {:X}", (UINT) cdResult);
-
-    return FFX_API_RETURN_OK;
+    return cdResult;
 }
 
 ffxReturnCode_t ffxConfigure_Vk(ffxContext* context, const ffxConfigureDescHeader* desc)
@@ -449,15 +506,38 @@ ffxReturnCode_t ffxConfigure_Vk(ffxContext* context, const ffxConfigureDescHeade
 
     LOG_DEBUG("type: {:X}", desc->type);
 
-    return FfxApiProxy::VULKAN_Configure()(context, desc);
+    if (desc->type == FFX_API_CONFIGURE_DESC_TYPE_UPSCALE_KEYVALUE)
+    {
+
+        auto kvDesc = (ffxConfigureDescUpscaleKeyValue*) desc;
+
+        LOG_DEBUG("key: {}, value: {}, ptr: {:X}", magic_enum::enum_name((FfxApiConfigureUpscaleKey) kvDesc->key),
+                  kvDesc->u64, (size_t) kvDesc->ptr);
+
+        if (!Config::Instance()->EnableHotSwapping.value_or_default())
+            return FFX_API_RETURN_OK;
+    }
+
+    if (Config::Instance()->EnableHotSwapping.value_or_default())
+        return FfxApiProxy::VULKAN_Configure()(context, desc);
+
+    return FFX_API_RETURN_OK;
 }
 
 ffxReturnCode_t ffxQuery_Vk(ffxContext* context, ffxQueryDescHeader* desc)
 {
+    LOG_DEBUG("");
+
     if (desc == nullptr)
         return FFX_API_RETURN_ERROR_PARAMETER;
 
     LOG_DEBUG("type: {:X}", desc->type);
+
+    auto type = FfxApiProxy::GetIndirectType(desc);
+    if (type == FFXStructType::SwapchainVulkan || type == FFXStructType::FG)
+    {
+        return FfxApiProxy::VULKAN_Query()(context, desc);
+    }
 
     if (desc->type == FFX_API_QUERY_DESC_TYPE_UPSCALE_GETRENDERRESOLUTIONFROMQUALITYMODE)
     {
@@ -488,24 +568,117 @@ ffxReturnCode_t ffxQuery_Vk(ffxContext* context, ffxQueryDescHeader* desc)
 
         return FFX_API_RETURN_OK;
     }
+    else if (desc->type == FFX_API_QUERY_DESC_TYPE_UPSCALE_GETJITTERPHASECOUNT)
+    {
+        // Take output scaling into account
+        auto jitterPhaseDesc = (ffxQueryDescUpscaleGetJitterPhaseCount*) desc;
 
-    return FfxApiProxy::VULKAN_Query()(context, desc);
+        if (jitterPhaseDesc && State::Instance().currentFeature)
+        {
+            jitterPhaseDesc->displayWidth = State::Instance().currentFeature->TargetWidth();
+            jitterPhaseDesc->renderWidth = State::Instance().currentFeature->RenderWidth();
+        }
+
+        if (!Config::Instance()->EnableHotSwapping.value_or_default())
+        {
+            float ratio = (float) jitterPhaseDesc->displayWidth / (float) jitterPhaseDesc->renderWidth;
+            *jitterPhaseDesc->pOutPhaseCount = static_cast<int32_t>(ceil(ratio * ratio * 8.0f)); // ceil(8*n^2)
+            LOG_DEBUG("Render resolution: {}, Display resolution: {}, Ratio: {}, Jitter phase count: {}",
+                      jitterPhaseDesc->renderWidth, jitterPhaseDesc->displayWidth, ratio,
+                      *jitterPhaseDesc->pOutPhaseCount);
+
+            return FFX_API_RETURN_OK;
+        }
+    }
+    else if (desc->type == FFX_API_QUERY_DESC_TYPE_GET_PROVIDER_VERSION)
+    {
+        auto providerDesc = (ffxQueryGetProviderVersion*) desc;
+        feature_version ver = {};
+
+        if (type == FFXStructType::SwapchainVulkan || type == FFXStructType::FG)
+        {
+            ver = FfxApiProxy::VersionVk();
+
+            providerDesc->versionId =
+                0xF600'0000ui64 << 32u << 32 | (((ver.major << 22) | (ver.minor << 12) | ver.patch) & 0xFFFFFFFF);
+        }
+        else if (type == FFXStructType::Upscaling)
+        {
+            ver = FfxApiProxy::VersionVk();
+
+            providerDesc->versionId =
+                0xF5A5'CA1Eui64 << 32 | (((ver.major << 22) | (ver.minor << 12) | ver.patch) & 0xFFFFFFFF);
+        }
+        else
+        {
+            ver = FfxApiProxy::VersionVk();
+
+            providerDesc->versionId = (((ver.major << 22) | (ver.minor << 12) | ver.patch) & 0xFFFFFFFF);
+        }
+
+        auto verName = std::format("{}.{}.{}", ver.major, ver.minor, ver.patch);
+        providerDesc->versionName = _strdup(verName.c_str());
+
+        return FFX_API_RETURN_OK;
+    }
+    else if (desc->type == FFX_API_QUERY_DESC_TYPE_UPSCALE_GETJITTEROFFSET)
+    {
+        auto joDesc = (ffxQueryDescUpscaleGetJitterOffset*) desc;
+
+        if (ffxGetJitterOffsetLocal(joDesc->pOutX, joDesc->pOutY, joDesc->index, joDesc->phaseCount))
+        {
+            LOG_DEBUG("Jitter offset: ({}, {})", *joDesc->pOutX, *joDesc->pOutY);
+            return FFX_API_RETURN_OK;
+        }
+
+        if (joDesc->pOutX != nullptr)
+            *joDesc->pOutX = 0.0f;
+
+        if (joDesc->pOutY != nullptr)
+            *joDesc->pOutY = 0.0f;
+
+        LOG_DEBUG("Jitter offset: (0.0, 0.0)");
+
+        return FFX_API_RETURN_OK;
+    }
+
+    if (context != nullptr && _contexts.contains(*context) && !Config::Instance()->EnableHotSwapping.value_or_default())
+    {
+        LOG_INFO("Hot swapping disabled, ignoring upscaler query");
+        return FFX_API_RETURN_OK;
+    }
+
+    // Need to redirect base queries to real FfxApi
+    if (Config::Instance()->EnableHotSwapping.value_or_default() ||
+        FfxApiProxy::GetType(desc->type) == FFXStructType::General)
+    {
+        return FfxApiProxy::VULKAN_Query()(context, desc);
+    }
+
+    return FFX_API_RETURN_OK;
 }
 
 ffxReturnCode_t ffxDispatch_Vk(ffxContext* context, ffxDispatchDescHeader* desc)
 {
-    // Skip OptiScaler stuff
-    if (!Config::Instance()->UseFfxInputs.value_or(true))
-        return FfxApiProxy::VULKAN_Dispatch()(context, desc);
-
     if (desc == nullptr || context == nullptr)
         return FFX_API_RETURN_ERROR_PARAMETER;
 
     LOG_DEBUG("context: {:X}, type: {:X}", (size_t) *context, desc->type);
 
-    if (!_initParams.contains(*context))
+    auto type = FfxApiProxy::GetType(desc->type);
+    if (type == FFXStructType::SwapchainVulkan || type == FFXStructType::FG)
     {
-        LOG_INFO("Not in _contexts, desc type: {:X}", desc->type);
+        return FfxApiProxy::VULKAN_Dispatch()(context, desc);
+    }
+
+    // Skip OptiScaler stuff
+    if (Config::Instance()->EnableHotSwapping.value_or_default() &&
+        !Config::Instance()->UseFfxInputs.value_or_default())
+        return FfxApiProxy::VULKAN_Dispatch()(context, desc);
+
+    if (context == nullptr || !_initParams.contains(*context))
+    {
+        LOG_INFO("Not in _contexts");
         return FfxApiProxy::VULKAN_Dispatch()(context, desc);
     }
 
@@ -518,12 +691,16 @@ ffxReturnCode_t ffxDispatch_Vk(ffxContext* context, ffxDispatchDescHeader* desc)
         if (header->type == FFX_API_DISPATCH_DESC_TYPE_UPSCALE)
         {
             dispatchDesc = (ffxDispatchDescUpscale*) header;
-            break;
+        }
+        else if (!Config::Instance()->EnableHotSwapping.value_or_default() &&
+                 header->type == FFX_API_DISPATCH_DESC_TYPE_UPSCALE_GENERATEREACTIVEMASK)
+        {
+            return FFX_API_RETURN_OK;
         }
 
         header = header->pNext;
 
-    } while (header != nullptr);
+    } while (header != nullptr && (size_t) header > 0x10000);
 
     if (dispatchDesc == nullptr)
     {
@@ -534,7 +711,7 @@ ffxReturnCode_t ffxDispatch_Vk(ffxContext* context, ffxDispatchDescHeader* desc)
     if (dispatchDesc->commandList == nullptr)
     {
         LOG_ERROR("dispatchDesc->commandList == nullptr !!!");
-        return FFX_API_RETURN_ERROR_PARAMETER;
+        return FfxApiProxy::VULKAN_Dispatch()(context, desc);
     }
 
     // If not in contexts list create and add context

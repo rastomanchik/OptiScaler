@@ -24,8 +24,6 @@
 
 static ankerl::unordered_dense::map<unsigned int, ContextData<IFeature_Dx12>> Dx12Contexts;
 
-static ankerl::unordered_dense::map<ID3D12GraphicsCommandList*, ID3D12RootSignature*> computeSignatures;
-static ankerl::unordered_dense::map<ID3D12GraphicsCommandList*, ID3D12RootSignature*> graphicSignatures;
 static ID3D12Device* D3D12Device = nullptr;
 static int evalCounter = 0;
 static std::wstring appDataPath = L".";
@@ -45,91 +43,6 @@ class ScopedInit
     }
     ~ScopedInit() { _skipInit = previousState; }
 };
-
-#pragma region Hooks
-
-typedef void (*PFN_SetComputeRootSignature)(ID3D12GraphicsCommandList* commandList,
-                                            ID3D12RootSignature* pRootSignature);
-
-static PFN_SetComputeRootSignature orgSetComputeRootSignature = nullptr;
-static PFN_SetComputeRootSignature orgSetGraphicRootSignature = nullptr;
-
-static bool contextRendering = false;
-static std::shared_mutex computeSigatureMutex;
-static std::shared_mutex graphSigatureMutex;
-
-static void hkSetComputeRootSignature(ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* pRootSignature)
-{
-    if (Config::Instance()->RestoreComputeSignature.value_or_default() && !contextRendering && commandList != nullptr &&
-        pRootSignature != nullptr)
-    {
-        std::unique_lock<std::shared_mutex> lock(computeSigatureMutex);
-        computeSignatures.insert_or_assign(commandList, pRootSignature);
-    }
-
-    orgSetComputeRootSignature(commandList, pRootSignature);
-}
-
-static void hkSetGraphicRootSignature(ID3D12GraphicsCommandList* commandList, ID3D12RootSignature* pRootSignature)
-{
-    if (Config::Instance()->RestoreGraphicSignature.value_or_default() && !contextRendering && commandList != nullptr &&
-        pRootSignature != nullptr)
-    {
-        std::unique_lock<std::shared_mutex> lock(graphSigatureMutex);
-        graphicSignatures.insert_or_assign(commandList, pRootSignature);
-    }
-
-    orgSetGraphicRootSignature(commandList, pRootSignature);
-}
-
-static void HookToCommandList(ID3D12GraphicsCommandList* InCmdList)
-{
-    if (orgSetComputeRootSignature != nullptr || orgSetGraphicRootSignature != nullptr)
-        return;
-
-    PVOID* pVTable = *(PVOID**) InCmdList;
-
-    orgSetComputeRootSignature = (PFN_SetComputeRootSignature) pVTable[29];
-    orgSetGraphicRootSignature = (PFN_SetComputeRootSignature) pVTable[30];
-
-    if (orgSetComputeRootSignature != nullptr || orgSetGraphicRootSignature != nullptr)
-    {
-        DetourTransactionBegin();
-        DetourUpdateThread(GetCurrentThread());
-
-        if (orgSetComputeRootSignature != nullptr)
-            DetourAttach(&(PVOID&) orgSetComputeRootSignature, hkSetComputeRootSignature);
-
-        if (orgSetGraphicRootSignature != nullptr)
-            DetourAttach(&(PVOID&) orgSetGraphicRootSignature, hkSetGraphicRootSignature);
-
-        LOG_DEBUG("Hooked SetRootSignature functions");
-
-        DetourTransactionCommit();
-    }
-}
-
-static void UnhookAll()
-{
-    DetourTransactionBegin();
-    DetourUpdateThread(GetCurrentThread());
-
-    if (orgSetComputeRootSignature != nullptr)
-    {
-        DetourDetach(&(PVOID&) orgSetComputeRootSignature, hkSetComputeRootSignature);
-        orgSetComputeRootSignature = nullptr;
-    }
-
-    if (orgSetGraphicRootSignature != nullptr)
-    {
-        DetourDetach(&(PVOID&) orgSetGraphicRootSignature, hkSetGraphicRootSignature);
-        orgSetGraphicRootSignature = nullptr;
-    }
-
-    DetourTransactionCommit();
-}
-
-#pragma endregion
 
 #pragma region DLSS Init Calls
 
@@ -542,9 +455,6 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_CreateFeature(ID3D12GraphicsComma
 {
     LOG_FUNC();
 
-    if (InCmdList != nullptr)
-        HookToCommandList(InCmdList);
-
     if (State::Instance().activeFgInput == FGInput::Nukems && DLSSGMod::isDx12Available() &&
         InFeatureID == NVSDK_NGX_Feature_FrameGeneration)
     {
@@ -586,7 +496,9 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_CreateFeature(ID3D12GraphicsComma
     // Root signature restore
     if (Config::Instance()->RestoreComputeSignature.value_or_default() ||
         Config::Instance()->RestoreGraphicSignature.value_or_default())
-        contextRendering = true;
+    {
+        D3D12Hooks::SetRootSignatureTracking(false);
+    }
 
     if (InFeatureID == NVSDK_NGX_Feature_SuperSampling)
     {
@@ -664,30 +576,14 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_CreateFeature(ID3D12GraphicsComma
     if (Config::Instance()->RestoreComputeSignature.value_or_default() ||
         Config::Instance()->RestoreGraphicSignature.value_or_default())
     {
-        if (Config::Instance()->RestoreComputeSignature.value_or_default() && computeSignatures.contains(InCmdList))
-        {
-            auto signature = computeSignatures[InCmdList];
-            LOG_TRACE("restore ComputeRootSig: {0:X}", (UINT64) signature);
-            orgSetComputeRootSignature(InCmdList, signature);
-        }
-        else if (Config::Instance()->RestoreComputeSignature.value_or_default())
-        {
-            LOG_TRACE("can't restore ComputeRootSig");
-        }
+        if (Config::Instance()->RestoreComputeSignature.value_or_default())
+            D3D12Hooks::RestoreComputeRootSignature(InCmdList);
 
-        if (Config::Instance()->RestoreGraphicSignature.value_or_default() && graphicSignatures.contains(InCmdList))
-        {
-            auto signature = graphicSignatures[InCmdList];
-            LOG_TRACE("restore GraphicRootSig: {0:X}", (UINT64) signature);
-            orgSetGraphicRootSignature(InCmdList, signature);
-        }
-        else if (Config::Instance()->RestoreGraphicSignature.value_or_default())
-        {
-            LOG_TRACE("can't restore GraphicRootSig");
-        }
-
-        contextRendering = false;
+        if (Config::Instance()->RestoreGraphicSignature.value_or_default())
+            D3D12Hooks::RestoreGraphicsRootSignature(InCmdList);
     }
+
+    D3D12Hooks::SetRootSignatureTracking(true);
 
     State::Instance().FGchanged = true;
 
@@ -889,7 +785,7 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCom
     if (State::Instance().changeBackend[handleId])
     {
         UpscalerInputsDx12::Reset();
-        contextRendering = false;
+        D3D12Hooks::SetRootSignatureTracking(true);
 
         FeatureProvider_Dx12::ChangeFeature(State::Instance().newBackend, D3D12Device, InCmdList, handleId,
                                             InParameters, deviceContext);
@@ -910,10 +806,10 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCom
     State::Instance().currentFeature = deviceContext->feature.get();
 
     // Root signature restore
-    if (deviceContext->feature->Name() != "DLSSD" && (Config::Instance()->RestoreComputeSignature.value_or_default() ||
-                                                      Config::Instance()->RestoreGraphicSignature.value_or_default()))
+    if (Config::Instance()->RestoreComputeSignature.value_or_default() ||
+        Config::Instance()->RestoreGraphicSignature.value_or_default())
     {
-        contextRendering = true;
+        D3D12Hooks::SetRootSignatureTracking(false);
     }
 
     UpscalerInputsDx12::UpscaleStart(InCmdList, InParameters, deviceContext->feature.get());
@@ -945,33 +841,17 @@ NVSDK_NGX_API NVSDK_NGX_Result NVSDK_NGX_D3D12_EvaluateFeature(ID3D12GraphicsCom
     }
 
     // Root signature restore
-    if (deviceContext->feature->Name() != "DLSSD" && (Config::Instance()->RestoreComputeSignature.value_or_default() ||
-                                                      Config::Instance()->RestoreGraphicSignature.value_or_default()))
+    if (Config::Instance()->RestoreComputeSignature.value_or_default() ||
+        Config::Instance()->RestoreGraphicSignature.value_or_default())
     {
-        if (Config::Instance()->RestoreComputeSignature.value_or_default() && computeSignatures.contains(InCmdList))
-        {
-            auto signature = computeSignatures[InCmdList];
-            LOG_TRACE("restore orgComputeRootSig: {0:X}", (UINT64) signature);
-            orgSetComputeRootSignature(InCmdList, signature);
-        }
-        else if (Config::Instance()->RestoreComputeSignature.value_or_default())
-        {
-            LOG_WARN("Can't restore ComputeRootSig!");
-        }
+        if (Config::Instance()->RestoreComputeSignature.value_or_default())
+            D3D12Hooks::RestoreComputeRootSignature(InCmdList);
 
-        if (Config::Instance()->RestoreGraphicSignature.value_or_default() && graphicSignatures.contains(InCmdList))
-        {
-            auto signature = graphicSignatures[InCmdList];
-            LOG_TRACE("restore orgGraphicRootSig: {0:X}", (UINT64) signature);
-            orgSetGraphicRootSignature(InCmdList, signature);
-        }
-        else if (Config::Instance()->RestoreGraphicSignature.value_or_default())
-        {
-            LOG_WARN("Can't restore GraphicRootSig!");
-        }
-
-        contextRendering = false;
+        if (Config::Instance()->RestoreGraphicSignature.value_or_default())
+            D3D12Hooks::RestoreGraphicsRootSignature(InCmdList);
     }
+
+    D3D12Hooks::SetRootSignatureTracking(true);
 
     LOG_DEBUG("Upscaling done: {}", evalResult);
 

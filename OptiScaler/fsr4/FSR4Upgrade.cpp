@@ -133,6 +133,7 @@ std::vector<std::filesystem::path> GetDriverStore()
 
 void CheckForGPU()
 {
+    // CheckForGPU already ran before, no need to run it again
     if (State::Instance().isRunningOnRDNA4.has_value())
         return;
 
@@ -164,12 +165,12 @@ void CheckForGPU()
 
         if (result == S_OK && adapterDesc.VendorId != VendorId::Microsoft)
         {
-            if (!Config::Instance()->Fsr4Update.has_value() || !Config::Instance()->Fsr4Update.value())
-                Config::Instance()->Fsr4Update.set_volatile_value(false);
+            if (!State::Instance().isRunningOnRDNA4.has_value() || !State::Instance().isRunningOnRDNA4.value())
+                State::Instance().isRunningOnRDNA4 = false;
 
             std::wstring szName(adapterDesc.Description);
             std::string descStr = std::format("Adapter: {}, VRAM: {} MB", wstring_to_string(szName),
-                                              adapterDesc.DedicatedVideoMemory / (1024 * 1024));
+                                              adapterDesc.DedicatedVideoMemory / (1024.0 * 1024.0));
             LOG_INFO("{}", descStr);
 
             // If GPU is AMD
@@ -178,9 +179,7 @@ void CheckForGPU()
                 // If GPU Name contains 90XX or GFX12 (Linux) always set it to true
                 if (szName.find(L" 90") != std::wstring::npos || szName.find(L" GFX12") != std::wstring::npos)
                 {
-                    if (!Config::Instance()->Fsr4Update.has_value())
-                        Config::Instance()->Fsr4Update.set_volatile_value(true);
-
+                    LOG_DEBUG("RDNA4 GPU detected");
                     State::Instance().isRunningOnRDNA4 = true;
                 }
             }
@@ -198,10 +197,12 @@ void CheckForGPU()
     factory->Release();
     factory = nullptr;
 
-    if (!State::Instance().isRunningOnRDNA4.has_value())
-        State::Instance().isRunningOnRDNA4 = false;
+    // If not set at Config enable/disable Fsr4Update according to GPU detection
+    if (!Config::Instance()->Fsr4Update.has_value())
+        Config::Instance()->Fsr4Update.set_volatile_value(State::Instance().isRunningOnRDNA4.value());
 
-    LOG_INFO("Fsr4Update: {}", Config::Instance()->Fsr4Update.value_or_default());
+    LOG_INFO("RNDA4: {}, Fsr4Update: {}", State::Instance().isRunningOnRDNA4.value(),
+             Config::Instance()->Fsr4Update.value_or_default());
 }
 
 struct ffxProviderInterface

@@ -367,7 +367,7 @@ bool IFeature_VkwDx12::CreateVulkanCommandBuffers(uint32_t queueFamilyIndex)
             }
 
 #ifdef VULKAN_DEBUG_LAYER
-            SetVkObjectName(VulkanDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t) VulkanCopyCommandBuffer[i],
+            SetVkObjectName(VulkanDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t) b.VulkanCopyCommandBuffer[i],
                             "VulkanCopyCommandBuffer");
 #endif
         }
@@ -387,7 +387,7 @@ bool IFeature_VkwDx12::CreateVulkanCommandBuffers(uint32_t queueFamilyIndex)
             }
 
 #ifdef VULKAN_DEBUG_LAYER
-            SetVkObjectName(VulkanDevice, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) VulkanBarrierCommandPool[i],
+            SetVkObjectName(VulkanDevice, VK_OBJECT_TYPE_COMMAND_POOL, (uint64_t) b.VulkanBarrierCommandPool[i],
                             "VulkanBarrierCommandPool");
 #endif
         }
@@ -408,7 +408,7 @@ bool IFeature_VkwDx12::CreateVulkanCommandBuffers(uint32_t queueFamilyIndex)
             }
 
 #ifdef VULKAN_DEBUG_LAYER
-            SetVkObjectName(VulkanDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t) VulkanBarrierCommandBuffer[i],
+            SetVkObjectName(VulkanDevice, VK_OBJECT_TYPE_COMMAND_BUFFER, (uint64_t) b.VulkanBarrierCommandBuffer[i],
                             "VulkanBarrierCommandBuffer");
 #endif
         }
