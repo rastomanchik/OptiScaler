@@ -3753,10 +3753,10 @@ bool MenuCommon::RenderMenu()
                             }
 
                             ImGui::PopItemWidth();
-                        }
 
-                        ShowHelpMarker("Set XeFG interpolation count\n"
-                                       "Will be active after restart!");
+                            ShowHelpMarker("Set XeFG interpolation count\n"
+                                           "Will be active after restart!");
+                        }
 
                         bool fgDV = config->FGXeFGDebugView.value_or_default();
                         if (ImGui::Checkbox("Debug View##2", &fgDV))
