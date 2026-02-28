@@ -2,8 +2,12 @@
 #include "DxgiFactory_WrappedCalls.h"
 
 #include "FG_Hooks.h"
+#include "D3D11_Hooks.h"
+#include "D3D12_Hooks.h"
 
 #include <Config.h>
+
+#include <d3d11.h>
 
 #include <spoofing/Dxgi_Spoofing.h>
 #include <wrapped/wrapped_swapchain.h>
@@ -137,14 +141,115 @@ HRESULT DxgiFactoryWrappedCalls::CreateSwapChain(IDXGIFactory* realFactory, Wrap
 #endif //
 
     // Check for SL proxy, get real queue
-    ID3D12CommandQueue* real = nullptr;
-    if (!Util::CheckForRealObject(__FUNCTION__, pDevice, (IUnknown**) &real))
-        real = (ID3D12CommandQueue*) pDevice;
+    ID3D12CommandQueue* cq = nullptr;
+    IUnknown* real = nullptr;
+    HRESULT FGSCResult = E_NOTIMPL;
 
-    State::Instance().currentCommandQueue = real;
+    if (pDevice->QueryInterface(IID_PPV_ARGS(&cq)) == S_OK)
+    {
+        cq->Release();
+
+        if (State::Instance().currentD3D12Device == nullptr)
+        {
+            ID3D12Device* device = nullptr;
+            if (cq->GetDevice(IID_PPV_ARGS(&device)) == S_OK)
+            {
+                if (device != nullptr)
+                {
+                    // Update current D3D12 device and adapter
+                    if (State::Instance().currentD3D12Device != device)
+                    {
+                        State::Instance().currentD3D12Device = device;
+
+                        IDXGIDevice* dxgiDevice = nullptr;
+                        if (device->QueryInterface(IID_PPV_ARGS(&dxgiDevice)) == S_OK)
+                        {
+                            IDXGIAdapter* adapter = nullptr;
+                            if (dxgiDevice->GetAdapter(&adapter) == S_OK)
+                            {
+                                adapter->GetDesc(&State::Instance().currentD3D12AdepterDesc);
+                                adapter->Release();
+                            }
+                            else
+                            {
+                                State::Instance().currentD3D12AdepterDesc = {};
+                            }
+
+                            dxgiDevice->Release();
+                        }
+                    }
+                    else
+                    {
+                        State::Instance().currentD3D12AdepterDesc = {};
+                    }
+
+                    LOG_INFO("Captured D3D12 device from command queue: {:X}", (UINT64) device);
+                    D3D12Hooks::HookDevice(State::Instance().currentD3D12Device);
+                    device->Release();
+                }
+            }
+        }
+
+        if (!Util::CheckForRealObject(__FUNCTION__, cq, &real))
+            real = cq;
+
+        State::Instance().currentCommandQueue = (ID3D12CommandQueue*) real;
+
+        // Create FG SwapChain
+        if (!_skipFGSwapChainCreation)
+        {
+            ScopedSkipFGSCCreation skipFGSCCreation {};
+            FGSCResult = FGHooks::CreateSwapChain(realFactory, real, &localDesc, ppSwapChain);
+
+            if (FGSCResult == S_OK)
+            {
+                State::Instance().currentSwapchainDesc = localDesc;
+                return FGSCResult;
+            }
+        }
+    }
+    else
+    {
+        LOG_INFO("Failed to get ID3D12CommandQueue from pDevice, creating Dx11 swapchain!");
+
+        ID3D11Device* device = nullptr;
+
+        if (pDevice->QueryInterface(IID_PPV_ARGS(&device)) == S_OK)
+        {
+            D3D11Hooks::HookToDevice(device);
+
+            device->Release();
+
+            // Update current D3D11 device and adapter
+            if (State::Instance().currentD3D11Device != device)
+            {
+                State::Instance().currentD3D11Device = device;
+
+                IDXGIDevice* dxgiDevice = nullptr;
+                if (device->QueryInterface(IID_PPV_ARGS(&dxgiDevice)) == S_OK)
+                {
+                    IDXGIAdapter* adapter = nullptr;
+                    if (dxgiDevice->GetAdapter(&adapter) == S_OK)
+                    {
+                        adapter->GetDesc(&State::Instance().currentD3D11AdepterDesc);
+                        adapter->Release();
+                    }
+                    else
+                    {
+                        State::Instance().currentD3D11AdepterDesc = {};
+                    }
+
+                    dxgiDevice->Release();
+                }
+            }
+            else
+            {
+                State::Instance().currentD3D11AdepterDesc = {};
+            }
+        }
+    }
 
     // Create FG SwapChain
-    HRESULT FGSCResult = E_NOTIMPL;
     if (!_skipFGSwapChainCreation)
     {
         ScopedSkipFGSCCreation skipFGSCCreation {};
@@ -351,15 +456,117 @@ HRESULT DxgiFactoryWrappedCalls::CreateSwapChainForHwnd(IDXGIFactory2* realFacto
     }
 #endif
 
-    // Check for SL proxy, get real queue
-    ID3D12CommandQueue* real = nullptr;
-    if (!Util::CheckForRealObject(__FUNCTION__, pDevice, (IUnknown**) &real))
-        real = (ID3D12CommandQueue*) pDevice;
+    ID3D12CommandQueue* cq = nullptr;
+    IUnknown* real = nullptr;
+    HRESULT FGSCResult = E_NOTIMPL;
 
-    State::Instance().currentCommandQueue = real;
+    if (pDevice->QueryInterface(IID_PPV_ARGS(&cq)) == S_OK)
+    {
+        cq->Release();
+
+        if (State::Instance().currentD3D12Device == nullptr)
+        {
+            ID3D12Device* device = nullptr;
+            if (cq->GetDevice(IID_PPV_ARGS(&device)) == S_OK)
+            {
+                if (device != nullptr)
+                {
+                    // Update current D3D12 device and adapter
+                    if (State::Instance().currentD3D12Device != device)
+                    {
+                        State::Instance().currentD3D12Device = device;
+
+                        IDXGIDevice* dxgiDevice = nullptr;
+                        if (device->QueryInterface(IID_PPV_ARGS(&dxgiDevice)) == S_OK)
+                        {
+                            IDXGIAdapter* adapter = nullptr;
+                            if (dxgiDevice->GetAdapter(&adapter) == S_OK)
+                            {
+                                adapter->GetDesc(&State::Instance().currentD3D12AdepterDesc);
+                                adapter->Release();
+                            }
+                            else
+                            {
+                                State::Instance().currentD3D12AdepterDesc = {};
+                            }
+
+                            dxgiDevice->Release();
+                        }
+                    }
+                    else
+                    {
+                        State::Instance().currentD3D12AdepterDesc = {};
+                    }
+
+                    LOG_INFO("Captured D3D12 device from command queue: {:X}", (UINT64) device);
+                    D3D12Hooks::HookDevice(State::Instance().currentD3D12Device);
+                    device->Release();
+                }
+            }
+        }
+
+        if (!Util::CheckForRealObject(__FUNCTION__, cq, &real))
+            real = cq;
+
+        State::Instance().currentCommandQueue = (ID3D12CommandQueue*) real;
+
+        // Create FG SwapChain
+        if (!_skipFGSwapChainCreation)
+        {
+            ScopedSkipFGSCCreation skipFGSCCreation {};
+            FGSCResult = FGHooks::CreateSwapChainForHwnd(realFactory, real, hWnd, &localDesc,
+                                                         pFullscreenDesc != nullptr ? &localFullscreenDesc : nullptr,
+                                                         pRestrictToOutput, ppSwapChain);
+
+            if (FGSCResult == S_OK)
+            {
+                ((IDXGISwapChain*) *ppSwapChain)->GetDesc(&State::Instance().currentSwapchainDesc);
+                return FGSCResult;
+            }
+        }
+    }
+    else
+    {
+        LOG_INFO("Failed to get ID3D12CommandQueue from pDevice, creating Dx11 swapchain!");
+
+        ID3D11Device* device = nullptr;
+
+        if (pDevice->QueryInterface(IID_PPV_ARGS(&device)) == S_OK)
+        {
+            D3D11Hooks::HookToDevice(device);
+
+            device->Release();
+
+            // Update current D3D11 device and adapter
+            if (State::Instance().currentD3D11Device != device)
+            {
+                State::Instance().currentD3D11Device = device;
+
+                IDXGIDevice* dxgiDevice = nullptr;
+                if (device->QueryInterface(IID_PPV_ARGS(&dxgiDevice)) == S_OK)
+                {
+                    IDXGIAdapter* adapter = nullptr;
+                    if (dxgiDevice->GetAdapter(&adapter) == S_OK)
+                    {
+                        adapter->GetDesc(&State::Instance().currentD3D11AdepterDesc);
+                        adapter->Release();
+                    }
+                    else
+                    {
+                        State::Instance().currentD3D11AdepterDesc = {};
+                    }
+
+                    dxgiDevice->Release();
+                }
+            }
+            else
+            {
+                State::Instance().currentD3D11AdepterDesc = {};
+            }
+        }
+    }
 
     // Create FG SwapChain
-    HRESULT FGSCResult = E_NOTIMPL;
     if (!_skipFGSwapChainCreation)
     {
         ScopedSkipFGSCCreation skipFGSCCreation {};

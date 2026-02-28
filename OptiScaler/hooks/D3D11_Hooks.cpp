@@ -21,14 +21,34 @@ bool _skipDx11Create = false;
 // DirectX
 typedef HRESULT (*PFN_CreateSamplerState)(ID3D11Device* This, const D3D11_SAMPLER_DESC* pSamplerDesc,
                                           ID3D11SamplerState** ppSamplerState);
+typedef ULONG (*PFN_Release)(IUnknown* This);
 
 static PFN_D3D11_CREATE_DEVICE o_D3D11CreateDevice = nullptr;
 static PFN_D3D11_CREATE_DEVICE_AND_SWAP_CHAIN o_D3D11CreateDeviceAndSwapChain = nullptr;
 static PFN_CreateSamplerState o_CreateSamplerState = nullptr;
 static PFN_D3D11ON12_CREATE_DEVICE o_D3D11On12CreateDevice = nullptr;
+static PFN_Release o_D3D11DeviceRelease = nullptr;
 
 static HRESULT hkCreateSamplerState(ID3D11Device* This, const D3D11_SAMPLER_DESC* pSamplerDesc,
                                     ID3D11SamplerState** ppSamplerState);
+
+static ULONG hkD3D11DeviceRelease(IUnknown* device)
+{
+    if (State::Instance().currentD3D11Device == device)
+    {
+        device->AddRef();
+        auto refCount = o_D3D11DeviceRelease(device);
+
+        if (refCount == 1)
+        {
+            LOG_DEBUG("Set State::Instance().currentD3D11Device = nullptr, was: {:X}", (size_t) device);
+            State::Instance().currentD3D11Device = nullptr;
+        }
+    }
+
+    auto result = o_D3D11DeviceRelease(device);
+    return result;
+}
 
 static inline D3D11_FILTER UpgradeToAF(D3D11_FILTER f)
 {
@@ -63,7 +83,7 @@ static inline D3D11_FILTER UpgradeToAF(D3D11_FILTER f)
     return D3D11_FILTER_ANISOTROPIC;
 }
 
-static void HookToDevice(ID3D11Device* InDevice)
+static void HookToDeviceLocal(ID3D11Device* InDevice)
 {
     if (o_CreateSamplerState != nullptr || InDevice == nullptr)
         return;
@@ -73,15 +93,20 @@ static void HookToDevice(ID3D11Device* InDevice)
     // Get the vtable pointer
     PVOID* pVTable = *(PVOID**) InDevice;
 
+    o_D3D11DeviceRelease = (PFN_Release) pVTable[2];
     o_CreateSamplerState = (PFN_CreateSamplerState) pVTable[23];
 
     // Apply the detour
-    if (o_CreateSamplerState != nullptr)
+    if (o_CreateSamplerState != nullptr || o_D3D11DeviceRelease != nullptr)
     {
         DetourTransactionBegin();
         DetourUpdateThread(GetCurrentThread());
 
-        DetourAttach(&(PVOID&) o_CreateSamplerState, hkCreateSamplerState);
+        if (o_D3D11DeviceRelease != nullptr)
+            DetourAttach(&(PVOID&) o_D3D11DeviceRelease, hkD3D11DeviceRelease);
+
+        if (o_CreateSamplerState != nullptr)
+            DetourAttach(&(PVOID&) o_CreateSamplerState, hkCreateSamplerState);
 
         DetourTransactionCommit();
     }
@@ -120,7 +145,7 @@ static HRESULT hkD3D11On12CreateDevice(IUnknown* pDevice, UINT Flags, const D3D_
     if (result == S_OK && *ppDevice != nullptr && !rtss && State::Instance().currentD3D12Device == nullptr)
     {
         LOG_INFO("Device captured, D3D11Device: {0:X}", (UINT64) *ppDevice);
-        HookToDevice(*ppDevice);
+        HookToDeviceLocal(*ppDevice);
     }
 
     if (result == S_OK && *ppDevice != nullptr)
@@ -223,7 +248,7 @@ static HRESULT hkD3D11CreateDevice(IDXGIAdapter* pAdapter, D3D_DRIVER_TYPE Drive
         if (szName.size() > 0)
             State::Instance().DeviceAdapterNames[*ppDevice] = wstring_to_string(szName);
 
-        HookToDevice(*ppDevice);
+        HookToDeviceLocal(*ppDevice);
     }
 
     LOG_FUNC_RESULT(result);
@@ -362,7 +387,7 @@ static HRESULT hkD3D11CreateDeviceAndSwapChain(IDXGIAdapter* pAdapter, D3D_DRIVE
     if (result == S_OK && *ppDevice != nullptr && State::Instance().currentD3D12Device == nullptr)
     {
         LOG_INFO("Device captured");
-        HookToDevice(*ppDevice);
+        HookToDeviceLocal(*ppDevice);
     }
 
     if (result == S_OK && pSwapChainDesc != nullptr && ppSwapChain != nullptr && *ppSwapChain != nullptr &&
@@ -473,6 +498,8 @@ static HRESULT hkCreateSamplerState(ID3D11Device* This, const D3D11_SAMPLER_DESC
 
     return o_CreateSamplerState(This, &newDesc, ppSamplerState);
 }
+
+void D3D11Hooks::HookToDevice(ID3D11Device* InDevice) { HookToDeviceLocal(InDevice); }
 
 void D3D11Hooks::Hook(HMODULE dx11Module)
 {
