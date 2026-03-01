@@ -3496,7 +3496,7 @@ bool MenuCommon::RenderMenu()
 
                         ImGui::Spacing();
                         ImGui::Spacing();
-                        if (auto ch = ScopedCollapsingHeader(u8"Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
+                        if (auto ch = ScopedCollapsingHeader("Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
                         {
                             ScopedIndent indent {};
                             ImGui::Spacing();
