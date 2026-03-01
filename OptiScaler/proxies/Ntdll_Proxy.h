@@ -28,7 +28,7 @@ class NtdllProxy
         // This will receive the module handle:
         HANDLE hModule = nullptr;
 
-        NTSTATUS status = o_LdrLoadDll(nullptr, // PathToFile – we rely on the default search order
+        NTSTATUS status = o_LdrLoadDll(nullptr, // PathToFile â€“ we rely on the default search order
                                        &flags,  // optional flags
                                        &uName,  // the name of the DLL
                                        &hModule // out: module handle
