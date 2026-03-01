@@ -4,6 +4,8 @@
 #include <Util.h>
 #include <Config.h>
 
+#include <magic_enum.hpp>
+
 #include <resource_tracking/ResTrack_Dx12.h>
 
 #include <proxies/D3D12_Proxy.h>
@@ -113,8 +115,8 @@ static ID3D12InfoQueue1* infoQueue1 = nullptr;
 static void CALLBACK D3D12DebugCallback(D3D12_MESSAGE_CATEGORY Category, D3D12_MESSAGE_SEVERITY Severity,
                                         D3D12_MESSAGE_ID ID, LPCSTR pDescription, void* pContext)
 {
-    LOG_DEBUG("Category: {}, Severity: {}, ID: {}, Message: {}", (UINT) Category, (UINT) Severity, (UINT) ID,
-              pDescription);
+    LOG_DEBUG("[{}] [{}] [{}]: {}", magic_enum::enum_name(Category), magic_enum::enum_name(Severity),
+              magic_enum::enum_name(ID), pDescription);
 }
 #endif
 
@@ -447,8 +449,8 @@ static HRESULT hkD3D12CreateDevice(IDXGIAdapter* pAdapter, D3D_FEATURE_LEVEL Min
             if (infoQueue->QueryInterface(IID_PPV_ARGS(&infoQueue1)) == S_OK && infoQueue1 != nullptr)
             {
                 LOG_DEBUG("infoQueue1 accuired, registering MessageCallback");
-                res = infoQueue1->RegisterMessageCallback(D3D12DebugCallback, D3D12_MESSAGE_CALLBACK_IGNORE_FILTERS,
-                                                          NULL, NULL);
+                res = infoQueue1->RegisterMessageCallback(D3D12DebugCallback, D3D12_MESSAGE_CALLBACK_FLAG_NONE, NULL,
+                                                          NULL);
             }
         }
 #endif
@@ -543,9 +545,6 @@ static HRESULT hkCreateDevice(ID3D12DeviceFactory* pFactory, IDXGIAdapter* pAdap
             else
                 o_D3D12DeviceRelease(_intelD3D12Device);
         }
-
-        // if (Config::Instance()->UESpoofIntelAtomics64.value_or_default())
-        //     UnhookDevice();
 
         HookToDevice(State::Instance().currentD3D12Device);
         _d3d12Captured = true;
