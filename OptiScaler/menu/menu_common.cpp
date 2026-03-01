@@ -2336,7 +2336,8 @@ bool MenuCommon::RenderMenu()
                 {
                     ImGui::Spacing();
                     ImGui::Text(
-						"Не могу найти nvngx.dll and libxess.dll and FSR inputs\nНастройки масштабирования не активны.");
+						"Не могу найти nvngx.dll and libxess.dll and FSR inputs\n"
+						"Настройки масштабирования не активны.");
                     ImGui::Spacing();
 
                     if (config->UseHQFont.value_or_default())
