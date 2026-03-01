@@ -4707,7 +4707,7 @@ bool MenuCommon::RenderMenu()
                             // if motion vectors are not display size
                             ImGui::BeginDisabled(!currentFeature->LowResMV());
 
-                            ImGui::SeparatorText("Output Scaling");
+                            ImGui::SeparatorText("Выходящее масштабирование.");
 
                             float defaultRatio = 1.5f;
 
@@ -4721,15 +4721,16 @@ bool MenuCommon::RenderMenu()
 
                             ImGui::BeginDisabled((currentBackend == "xess" || currentBackend == "dlss") &&
                                                  currentFeature->RenderWidth() > currentFeature->DisplayWidth());
-                            ImGui::Checkbox("Enable", &_ssEnabled);
+                            ImGui::Checkbox("Включено", &_ssEnabled);
                             ImGui::EndDisabled();
 
-                            ShowHelpMarker("Upscales the image internally to a higher output resolution\n"
-                                           "then downscales it back to your display resolution\n\n"
-                                           "Values <1.0 make the upscaler cheaper\n"
-                                           "Values >1.0 make image sharper at the cost of performance\n\n"
-                                           "If greyed out, please check Git Wiki - Unreal Engine tweaks\n\n"
-                                           "Target res and total ratio at the bottom (max. total 3.0!)");
+                            ShowHelpMarker(
+                                "Внутренне масштабирует изображение до более высокого разрешения,\n"
+                                "а затем сжимает его обратно до разрешения вашего экрана.\n"
+                                "Значения < 1.0 снижают нагрузку на апскейлер.\n"
+                                "Значения > 1.0 делают изображение четче ценой производительности.\n"
+                                "Если параметр недоступен, изучите раздел «Unreal Engine tweaks» в Git Wiki.\n"
+                                "Целевое разрешение и итоговый коэффициент указаны внизу (макс. 3.0!).");
 
                             ImGui::SameLine(0.0f, 6.0f);
 
@@ -4764,7 +4765,7 @@ bool MenuCommon::RenderMenu()
                                                  _ssDownsampler != config->OutputScalingDownscaler.value_or_default());
 
                             ImGui::BeginDisabled(!applyEnabled);
-                            if (ImGui::Button("Apply Change"))
+                            if (ImGui::Button("Применить"))
                             {
                                 config->OutputScalingEnabled = _ssEnabled;
                                 config->OutputScalingMultiplier = _ssRatio;
@@ -4801,7 +4802,7 @@ bool MenuCommon::RenderMenu()
                     }
 
                     // INIT -----------------------------
-                    ImGui::SeparatorText("Init Flags");
+                    ImGui::SeparatorText("Флаги инициализации");
                     if (ImGui::BeginTable("init", 2, ImGuiTableFlags_SizingStretchProp))
                     {
                         ImGui::TableNextColumn();
@@ -4817,9 +4818,9 @@ bool MenuCommon::RenderMenu()
                             ReInitUpscaler();
                         }
                         ShowResetButton(&config->AutoExposure, "R");
-                        ShowHelpMarker("Some Unreal Engine games need this\n\n"
-                                       "Try using if colours flickering or\n"
-                                       "objects have ghosting trails");
+                        ShowHelpMarker("Необходимо для некоторых игр на Unreal Engine.\n\n"
+                                       "Попробуйте включить, если наблюдается мерцание цветов\n"
+                                       "или «гостинг» (шлейфы за объектами).");
 
                         ImGui::EndDisabled();
 
@@ -4847,16 +4848,15 @@ bool MenuCommon::RenderMenu()
                         ImGui::EndDisabled();
 
                         if (accessToReactiveMask)
-                            ShowHelpMarker("Allows the use of a Reactive mask\n"
-                                           "Keep in mind that a Reactive mask sent to DLSS\n"
-                                           "will not produce a good image in combination with FSR/XeSS");
+                            ShowHelpMarker("Данная опция работает с DLSS,\n"
+                                           "но не сделает графику лучше с FSR/XeSS");
                         else
-                            ShowHelpMarker("Option disabled because the game doesn't provide a Reactive mask");
+                            ShowHelpMarker("Опция неактивна, так как не предусмотрена игрой.");
 
                         ImGui::EndTable();
 
                         ImGui::Spacing();
-                        if (auto ch = ScopedCollapsingHeader("Advanced Init Flags"); ch.IsHeaderOpen())
+                        if (auto ch = ScopedCollapsingHeader("Дополнительные флаги инициализации"); ch.IsHeaderOpen())
                         {
                             ScopedIndent indent {};
                             ImGui::Spacing();
@@ -4871,7 +4871,7 @@ bool MenuCommon::RenderMenu()
                                     ReInitUpscaler();
                                 }
                                 ShowResetButton(&config->DepthInverted, "R##2");
-                                ShowHelpMarker("You shouldn't need to change it");
+                                ShowHelpMarker("Вам не нужно это менять!");
 
                                 ImGui::TableNextColumn();
                                 if (bool hdr = currentFeature->IsHdr(); ImGui::Checkbox("HDR", &hdr))
@@ -4880,7 +4880,8 @@ bool MenuCommon::RenderMenu()
                                     ReInitUpscaler();
                                 }
                                 ShowResetButton(&config->HDR, "R##1");
-                                ShowHelpMarker("Might help with purple hue in some games");
+                                ShowHelpMarker("Может исправить некорректную передачу\n"
+                                               "фиолетового цвета в некоторых играх..");
 
                                 ImGui::TableNextColumn();
                                 if (bool mv = !currentFeature->LowResMV(); ImGui::Checkbox("Display Res. MV", &mv))
@@ -4898,8 +4899,8 @@ bool MenuCommon::RenderMenu()
                                     ReInitUpscaler();
                                 }
                                 ShowResetButton(&config->DisplayResolution, "R##4");
-                                ShowHelpMarker("Mostly a fix for Unreal Engine games\n"
-                                               "Top left part of the screen will be blurry");
+                                ShowHelpMarker("Может помочь в играх на Unreal Engine\n"
+                                               "Верхний левый угол скрана будет в блюре");
 
                                 ImGui::TableNextColumn();
 
@@ -4967,7 +4968,7 @@ bool MenuCommon::RenderMenu()
 
                 // ADVANCED SETTINGS -----------------------------
                 ImGui::Spacing();
-                if (auto ch = ScopedCollapsingHeader("Advanced Settings"); ch.IsHeaderOpen())
+                if (auto ch = ScopedCollapsingHeader("Дополнительные настройки"); ch.IsHeaderOpen())
                 {
                     ScopedIndent indent {};
                     ImGui::Spacing();
@@ -4978,13 +4979,13 @@ bool MenuCommon::RenderMenu()
                         if (ImGui::Checkbox("Enable Extended Limits", &extendedLimits))
                             config->ExtendedLimits = extendedLimits;
 
-                        ShowHelpMarker("Extended sliders limit for quality presets\n\n"
-                                       "Using this option changes resolution detection logic\n"
-                                       "and might cause issues and crashes!");
+                        ShowHelpMarker("Расширение диапазонов регулировки для настроек качества\n\n"
+                                       "Активация данной опции изменяет логику\n"
+                                       "определения разрешения экрана и может вызвать сбои!");
                     }
 
                     bool pcShaders = config->UsePrecompiledShaders.value_or_default();
-                    if (ImGui::Checkbox("Use Precompiled Shaders", &pcShaders))
+                    if (ImGui::Checkbox("Предкомпиляция шейдеров", &pcShaders))
                     {
                         config->UsePrecompiledShaders = pcShaders;
                         state.newBackend = currentBackend;
@@ -5461,19 +5462,19 @@ bool MenuCommon::RenderMenu()
                 }
 
                 ImGui::Spacing();
-                if (auto ch = ScopedCollapsingHeader("Keybinds"); ch.IsHeaderOpen())
+                if (auto ch = ScopedCollapsingHeader("Горячие клавиши"); ch.IsHeaderOpen())
                 {
                     ScopedIndent indent {};
                     ImGui::Spacing();
 
-                    ImGui::Text("Key combinations are currently NOT supported!");
-                    ImGui::Text("Escape to cancel, Backspace to unbind");
+                    ImGui::Text("Комбинация клавиш не поддерживается!");
+                    ImGui::Text("Escape для отмены, Backspace для сброса.");
                     ImGui::Spacing();
 
-                    static auto menu = Keybind("Menu", 10);
+                    static auto menu = Keybind("Меню", 10);
                     static auto fpsOverlay = Keybind("FPS Overlay", 11);
                     static auto fpsOverlayCycle = Keybind("FPS Overlay Cycle", 12);
-                    static auto fgEnable = Keybind("Frame Generation", 13);
+                    static auto fgEnable = Keybind("Генерация кадров", 13);
 
                     menu.Render(config->ShortcutKey);
                     fpsOverlay.Render(config->FpsShortcutKey);
@@ -5499,7 +5500,7 @@ bool MenuCommon::RenderMenu()
                     if (currentFeature != nullptr && !currentFeature->IsFrozen())
                     {
                         ImGui::TableNextColumn();
-                        ImGui::Text("Upscaler");
+                        ImGui::Text("Масштабирование");
                         auto ups = StrFmt("%7.2f ms", state.upscaleTimes.back());
                         ImGui::PlotLines(
                             ups.c_str(), [](void* rb, int idx) -> float
@@ -5537,7 +5538,7 @@ bool MenuCommon::RenderMenu()
                                            "1.3", "1.4", "1.5", "1.6", "1.7", "1.8", "1.9", "2.0" };
                 const char* selectedScaleName = uiScales[_selectedScale];
 
-                if (ImGui::BeginCombo("Menu UI Scale", selectedScaleName))
+                if (ImGui::BeginCombo("Масштаб окна", selectedScaleName))
                 {
                     for (int n = 0; n < 16; n++)
                     {
@@ -5562,12 +5563,13 @@ bool MenuCommon::RenderMenu()
                 const char* uiLocales[] = { "en", "ru", "ua" };
                 const char* selectedLocalesName = uiLocales[_selectedLocale];
 
-                if (ImGui::BeginCombo("Menu UI Lang", selectedLocalesName))
+                if (ImGui::BeginCombo("Язык меню", selectedLocalesName))
                 {
                     for (int n = 0; n < 3; n++)
                     {
                         if (ImGui::Selectable(uiLocales[n], (_selectedLocale == n)))
                         {
+                            _selectedLocale = n;
                         }
                     }
 
@@ -5578,12 +5580,12 @@ bool MenuCommon::RenderMenu()
 
                 ImGui::SameLine(0.0f, 15.0f);
 
-                if (ImGui::Button("Save INI"))
+                if (ImGui::Button("Сохранить INI"))
                     config->SaveIni();
 
                 ImGui::SameLine(0.0f, 6.0f);
 
-                if (ImGui::Button("Close"))
+                if (ImGui::Button("Закрыть"))
                 {
                     _isVisible = false;
                     hasGamepad = (io.BackendFlags | ImGuiBackendFlags_HasGamepad) > 0;
@@ -5693,8 +5695,8 @@ bool MenuCommon::RenderMenu()
                         _mipBiasCalculated = log2((float) _renderWidth / (float) _displayWidth);
                     }
 
-                    const char* q[] = { "Ultra Performance", "Performance",   "Balanced",
-                                        "Quality",           "Ultra Quality", "DLAA" };
+                    const char* q[] = { "Ультра продуктивность", "Продуктивность", "Баланс", "Качество",
+                                        "Высокое качество",      "Без сжатия" };
                     float fr[] = { 3.0f, 2.0f, 1.7f, 1.5f, 1.3f, 1.0f };
                     auto configQ = _mipmapUpscalerQuality;
 
@@ -5702,7 +5704,7 @@ bool MenuCommon::RenderMenu()
 
                     ImGui::BeginDisabled(config->UpscaleRatioOverrideEnabled.value_or_default());
 
-                    if (ImGui::BeginCombo("Upscaler Quality", selectedQ))
+                    if (ImGui::BeginCombo("Качество масштабирования", selectedQ))
                     {
                         for (int n = 0; n < 6; n++)
                         {
@@ -5773,7 +5775,7 @@ bool MenuCommon::RenderMenu()
 
                     ImGui::SameLine(ImGui::GetWindowWidth() - 130.0f);
 
-                    if (ImGui::Button("Use Value"))
+                    if (ImGui::Button("Использовать"))
                     {
                         _mipBias = _mipBiasCalculated;
                         _showMipmapCalcWindow = false;
@@ -5781,7 +5783,7 @@ bool MenuCommon::RenderMenu()
 
                     ImGui::SameLine(0.0f, 6.0f);
 
-                    if (ImGui::Button("Close"))
+                    if (ImGui::Button("Закрыть"))
                         _showMipmapCalcWindow = false;
 
                     ImGui::Spacing();
@@ -5823,7 +5825,7 @@ bool MenuCommon::RenderMenu()
                             ImGui::Text("%08x, %s->%s, Count: %llu, %s", (size_t) it->first,
                                         GetSourceString(it->second.captureInfo & 0xFF).c_str(),
                                         GetDispatchString(it->second.captureInfo & 0xFF00).c_str(),
-                                        it->second.usageCount, it->second.enabled ? "Active" : "Passive");
+                                        it->second.usageCount, it->second.enabled ? "Активный" : "Отключен");
 
                             ImGui::TableSetColumnIndex(1);
 
@@ -5831,9 +5833,9 @@ bool MenuCommon::RenderMenu()
                             std::string text;
 
                             if (it->second.enabled)
-                                text = StrFmt("Disable##%d", btnCount);
+                                text = StrFmt("Отключено##%d", btnCount);
                             else
-                                text = StrFmt("Enable##%d", btnCount);
+                                text = StrFmt("Включено##%d", btnCount);
 
                             if (ImGui::Button(text.c_str()))
                                 it->second.enabled = !it->second.enabled;
@@ -5842,12 +5844,12 @@ bool MenuCommon::RenderMenu()
                         ImGui::EndTable();
                     }
 
-                    if (ImGui::Button("Clear##4"))
+                    if (ImGui::Button("Очистить##4"))
                         state.ClearCapturedHudlesses = true;
 
                     ImGui::SameLine(0.0f, 8.0f);
 
-                    if (ImGui::Button("Close##4"))
+                    if (ImGui::Button("Закрыть##4"))
                         _showHudlessWindow = false;
 
                     ImGui::End();
@@ -5871,9 +5873,6 @@ void MenuCommon::Init(HWND InHwnd, bool isUWP)
     _isVisible = false;
     _isUWP = isUWP;
 
-    LOG_DEBUG("Handle: {0:X}", (size_t) _handle);
-
-    // Установка контекста Dear ImGui
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGui::StyleColorsDark();
@@ -5899,13 +5898,11 @@ void MenuCommon::Init(HWND InHwnd, bool isUWP)
         if (!isUWP)
         {
             initResult = ImGui_ImplWin32_Init(InHwnd);
-            LOG_DEBUG("ImGui_ImplWin32_Init result: {0}", initResult);
         }
         else
         {
             initResult = ImGui_ImplUwp_Init(InHwnd);
             ImGui_BindUwpKeyUp(KeyUp);
-            LOG_DEBUG("ImGui_ImplUwp_Init result: {0}", initResult);
         }
     }
 
@@ -5938,8 +5935,6 @@ void MenuCommon::Init(HWND InHwnd, bool isUWP)
 
     if (_oWndProc == nullptr && !isUWP)
         _oWndProc = (WNDPROC) SetWindowLongPtr(InHwnd, GWLP_WNDPROC, (LONG_PTR) WndProc);
-
-    LOG_DEBUG("_oWndProc: {0:X}", (ULONG64) _oWndProc);
 
     if (!pfn_SetCursorPos_hooked)
         AttachHooks();
