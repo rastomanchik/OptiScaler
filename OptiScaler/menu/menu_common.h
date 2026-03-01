@@ -98,6 +98,8 @@ class MenuCommon
     inline static int _selectedScale = 5;
     inline static bool _imguiSizeUpdate = true;
 
+    inline static int _selectedLocale = 0;
+
     // overlay states
     inline static bool _dx11Ready = false;
     inline static bool _dx12Ready = false;
