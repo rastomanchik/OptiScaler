@@ -115,7 +115,7 @@ static std::vector<std::string> splashText = { "Копируй с умом, а �
                                                "ИИ не сможет переплюнуть этот шедевр",
                                                "Похоже, теперь мы выпускаем демо пре-альфа билдов",
                                                "Новичок в районе — TH",
-                                               "Еще один статтер, и я сорвусь"};
+                                               "Еще один статтер, и я сорвусь" };
 static ImVec2 updateNoticePosition(-1000.0f, -1000.0f);
 static ImVec2 updateNoticeSize(0.0f, 0.0f);
 static double updateNoticeStart = 0.0;
@@ -690,7 +690,7 @@ class Keybind
         if (waitingForKey)
         {
             ImGui::SameLine();
-            ImGui::Text("Press any key...");
+            ImGui::Text("Нажмите любую кнопку...");
 
             if (lastKey == 0 || lastKey == VK_LBUTTON || lastKey == VK_RBUTTON || lastKey == VK_MBUTTON)
                 return;
@@ -1762,7 +1762,7 @@ bool MenuCommon::RenderMenu()
             ImGui::PushStyleColor(ImGuiCol_FrameBg, IM_COL32(0, 0, 0, 0));
 
             bool pushedFont = false;
-            if (ImGui::Begin("Update Available", nullptr,
+            if (ImGui::Begin("Доступно обновление", nullptr,
                              ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoDecoration |
                                  ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoFocusOnAppearing |
                                  ImGuiWindowFlags_NoNav))
@@ -1785,7 +1785,7 @@ bool MenuCommon::RenderMenu()
 
                 ImGui::TextColored(toneMapColor(ImVec4(1.0f, 0.0f, 0.0f, 1.0f)), "OptiScaler Update available");
                 ImGui::Spacing();
-                ImGui::Text("Press %s for more info",
+                ImGui::Text("Нажмите %s для дополнительной информации",
                             Keybind::KeyNameFromVirtualKeyCode(config->ShortcutKey.value_or_default()).c_str());
 
                 if (pushedFont)
@@ -2290,8 +2290,8 @@ bool MenuCommon::RenderMenu()
 
                     std::string joinedUpscalers(joined.begin(), joined.end());
 
-                    ImGui::Text("Please select %s as upscaler\nfrom game options and enter the game\nto enable "
-                                "upscaler settings.\n",
+                    ImGui::Text("Выберите %s as тип масштабирования\nв настройках игры и начните игру\nдля активации"
+                                "настроек.\n",
                                 joinedUpscalers.c_str());
 
                     if (config->UseHQFont.value_or_default())
@@ -2303,33 +2303,33 @@ bool MenuCommon::RenderMenu()
 
                     if (!state.isRunningOnNvidia)
                     {
-                        ImGui::Text("nvngx.dll: %s", state.nvngxExists ? "Exists" : "Doesn't Exist");
+                        ImGui::Text("nvngx.dll: %s", state.nvngxExists ? "Найден" : "Не найден");
                     }
 
                     if (state.isRunningOnNvidia)
                     {
-                        ImGui::Text("nvngx_dlss : %s", state.NVNGX_DLSS_Path.has_value() ? "Exists" : "Doesn't Exist");
+                        ImGui::Text("nvngx_dlss : %s", state.NVNGX_DLSS_Path.has_value() ? "Найден" : "Не найден");
                         ImGui::SameLine(0.0f, 16.0f);
                         ImGui::Text("nvngx_dlssd : %s",
-                                    state.NVNGX_DLSSD_Path.has_value() ? "Exists" : "Doesn't Exist");
+                                    state.NVNGX_DLSSD_Path.has_value() ? "Найден" : "Не найден");
                     }
                     else
                     {
                         ImGui::SameLine(0.0f, 16.0f);
                         ImGui::Text("nvngx replacement: %s",
-                                    state.nvngxReplacement.has_value() ? "Exists" : "Doesn't Exist");
+                                    state.nvngxReplacement.has_value() ? "Найден" : "Не найден");
                     }
 
                     ImGui::Text("libxess: %s",
-                                (state.libxessExists || XeSSProxy::Module() != nullptr) ? "Exists" : "Doesn't Exist");
+                                (state.libxessExists || XeSSProxy::Module() != nullptr) ? "Найден" : "Не найден");
 
-                    ImGui::Text("FSR Hooks: %s", state.fsrHooks ? "Exist" : "Don't Exist");
+                    ImGui::Text("FSR Hooks: %s", state.fsrHooks ? "Найден" : "Не найден");
                     ImGui::SameLine(0.0f, 16.0f);
-                    ImGui::Text("FSR 3.1: %s", FfxApiProxy::Dx12Module() != nullptr ? "Exists" : "Doesn't Exist");
+                    ImGui::Text("FSR 3.1: %s", FfxApiProxy::Dx12Module() != nullptr ? "Найден" : "Не найден");
                     ImGui::SameLine(0.0f, 16.0f);
-                    ImGui::Text("FSR 3.1 SR: %s", FfxApiProxy::Dx12Module_SR() != nullptr ? "Exists" : "Doesn't Exist");
+                    ImGui::Text("FSR 3.1 SR: %s", FfxApiProxy::Dx12Module_SR() != nullptr ? "Найден" : "Не найден");
                     ImGui::SameLine(0.0f, 16.0f);
-                    ImGui::Text("FSR 3.1 FG: %s", FfxApiProxy::Dx12Module_FG() != nullptr ? "Exists" : "Doesn't Exist");
+                    ImGui::Text("FSR 3.1 FG: %s", FfxApiProxy::Dx12Module_FG() != nullptr ? "Найден" : "Не найден");
 
                     ImGui::Spacing();
                 }
@@ -2337,7 +2337,7 @@ bool MenuCommon::RenderMenu()
                 {
                     ImGui::Spacing();
                     ImGui::Text(
-                        "Can't find nvngx.dll and libxess.dll and FSR inputs\nUpscaling support will NOT work.");
+                        "Не могу найти nvngx.dll and libxess.dll and FSR inputs\nНастройки масштабирования не активны.");
                     ImGui::Spacing();
 
                     if (config->UseHQFont.value_or_default())
