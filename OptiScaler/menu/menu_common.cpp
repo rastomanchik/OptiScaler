@@ -2310,8 +2310,7 @@ bool MenuCommon::RenderMenu()
                     {
                         ImGui::Text("nvngx_dlss : %s", state.NVNGX_DLSS_Path.has_value() ? "Найден" : "Не найден");
                         ImGui::SameLine(0.0f, 16.0f);
-                        ImGui::Text("nvngx_dlssd : %s",
-                                    state.NVNGX_DLSSD_Path.has_value() ? "Найден" : "Не найден");
+                        ImGui::Text("nvngx_dlssd : %s", state.NVNGX_DLSSD_Path.has_value() ? "Найден" : "Не найден");
                     }
                     else
                     {
@@ -2336,8 +2335,7 @@ bool MenuCommon::RenderMenu()
                 else
                 {
                     ImGui::Spacing();
-                    ImGui::Text(
-                        "Не могу найти nvngx.dll and libxess.dll and FSR inputs\nНастройки масштабирования не активны.");
+                    ImGui::Text("Не могу найти nvngx.dll and libxess.dll and FSR inputs\nНастройки масштабирования не активны.");
                     ImGui::Spacing();
 
                     if (config->UseHQFont.value_or_default())
