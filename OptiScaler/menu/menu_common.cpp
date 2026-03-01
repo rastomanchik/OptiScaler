@@ -2335,8 +2335,8 @@ bool MenuCommon::RenderMenu()
                 else
                 {
                     ImGui::Spacing();
-					ImGui::Text("Не могу найти nvngx.dll, libxess.dll and FSR inputs\n"
-									"Настройки масштабирования не активны.");
+                    ImGui::Text("Не могу найти nvngx.dll, libxess.dll and FSR inputs\n"
+                                "Настройки масштабирования не активны.");
                     ImGui::Spacing();
 
                     if (config->UseHQFont.value_or_default())
@@ -3496,7 +3496,7 @@ bool MenuCommon::RenderMenu()
 
                         ImGui::Spacing();
                         ImGui::Spacing();
-                        if (auto ch = ScopedCollapsingHeader(u8"Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
+                        if (auto ch = ScopedCollapsingHeader("Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
                         {
                             ScopedIndent indent {};
                             ImGui::Spacing();
