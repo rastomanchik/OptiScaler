@@ -686,22 +686,17 @@ ffxReturnCode_t ffxDispatch_Vk(ffxContext* context, ffxDispatchDescHeader* desc)
     ffxDispatchDescUpscale* dispatchDesc = nullptr;
     bool rmDesc = false;
 
-    do
+    // WORKAROUND: Doom TDA sends non-nullptr pNext
+    // For now we are assuming dispatch is called with only one desc
+    if (header->type == FFX_API_DISPATCH_DESC_TYPE_UPSCALE)
     {
-        if (header->type == FFX_API_DISPATCH_DESC_TYPE_UPSCALE)
-        {
-            dispatchDesc = (ffxDispatchDescUpscale*) header;
-        }
-        else if (!Config::Instance()->EnableHotSwapping.value_or_default() &&
-                 header->type == FFX_API_DISPATCH_DESC_TYPE_UPSCALE_GENERATEREACTIVEMASK)
-        {
-            return FFX_API_RETURN_OK;
-        }
-
-        header = header->pNext;
-
-    } while (header != nullptr && (size_t) header > 0x10000);
-    // WORKAROUND: Doom TDA sends non-nullptr pNext that is invalid and close to 0, try to filter out
+        dispatchDesc = (ffxDispatchDescUpscale*) header;
+    }
+    else if (!Config::Instance()->EnableHotSwapping.value_or_default() &&
+             header->type == FFX_API_DISPATCH_DESC_TYPE_UPSCALE_GENERATEREACTIVEMASK)
+    {
+        return FFX_API_RETURN_OK;
+    }
 
     if (dispatchDesc == nullptr)
     {
