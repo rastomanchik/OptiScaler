@@ -2335,8 +2335,8 @@ bool MenuCommon::RenderMenu()
                 else
                 {
                     ImGui::Spacing();
-                    ImGui::Text("Не могу найти nvngx.dll, libxess.dll and FSR inputs\n"
-                                "Настройки масштабирования не активны.");
+					ImGui::Text("Не могу найти nvngx.dll, libxess.dll and FSR inputs\n"
+									"Настройки масштабирования не активны.");
                     ImGui::Spacing();
 
                     if (config->UseHQFont.value_or_default())
@@ -3044,19 +3044,19 @@ bool MenuCommon::RenderMenu()
                 };
                 std::vector<std::string> fgInputDesc = {
                     "",
-                    "Limited to FSR3-FG\n\nSupports Hudless out of the box\n\nUses Streamline swapchain for pacing", 
-                    "Can be used with any FG Output\n\nSupports Hudless out of the box", 
-                    "Can be used with any FG Output\n\nSupports Hudless out of the box\n\nLimited to games that use Streamline v2", 
-                    "Support not implemented", 
+                    "Limited to FSR3-FG\n\nSupports Hudless out of the box\n\nUses Streamline swapchain for pacing",
+                    "Can be used with any FG Output\n\nSupports Hudless out of the box",
+                    "Can be used with any FG Output\n\nSupports Hudless out of the box\n\nLimited to games that use Streamline v2",
+                    "Support not implemented",
                     "Upscaler must be enabled\n\nCan be used with any FG Output, but might be imperfect with some\n\nTo prevent UI glitching, HUDfix required",
-                    "Can be used with any FG Output\n\nSupports Hudless out of the box", 
+                    "Can be used with any FG Output\n\nSupports Hudless out of the box",
                 };
-                std::vector<uint8_t> disabledMaskInput = { 
-                    false, 
-                    false, 
-                    false, 
+                std::vector<uint8_t> disabledMaskInput = {
+                    false,
+                    false,
+                    false,
                     false, // TODO: Disable DLSSG inputs in games that can't support it
-                    true, 
+                    true,
                     false,
                     false,
                 };
@@ -3137,16 +3137,16 @@ bool MenuCommon::RenderMenu()
                 };
                 std::vector<std::string> fgOutputDesc = {
                     "",
-                    "Enable DLSS-FG in-game", 
-                    "FSR3/4 FG", 
-                    "Support not implemented", 
+                    "Enable DLSS-FG in-game",
+                    "FSR3/4 FG",
+                    "Support not implemented",
                     "XeFG",
                 };
-                std::vector<uint8_t> disabledMaskOutput = { 
-                    false, 
-                    false, 
-                    false, 
-                    true, 
+                std::vector<uint8_t> disabledMaskOutput = {
+                    false,
+                    false,
+                    false,
+                    true,
                     false,
                 };
                 // clang-format on
@@ -3496,7 +3496,7 @@ bool MenuCommon::RenderMenu()
 
                         ImGui::Spacing();
                         ImGui::Spacing();
-                        if (auto ch = ScopedCollapsingHeader("Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
+                        if (auto ch = ScopedCollapsingHeader(u8"Дополнительные настройки FSR FG"); ch.IsHeaderOpen())
                         {
                             ScopedIndent indent {};
                             ImGui::Spacing();
@@ -5553,6 +5553,21 @@ bool MenuCommon::RenderMenu()
                                 style.MouseCursorScale = 1.0f;
 
                             _imguiSizeUpdate = true;
+                        }
+                    }
+
+                    ImGui::EndCombo();
+                }
+
+                const char* uiLocales[] = { "en", "ru", "ua" };
+                const char* selectedLocalesName = uiLocales[_selectedLocale];
+
+                if (ImGui::BeginCombo("Menu UI Lang", selectedLocalesName))
+                {
+                    for (int n = 0; n < 3; n++)
+                    {
+                        if (ImGui::Selectable(uiLocales[n], (_selectedLocale == n)))
+                        {
                         }
                     }
 
