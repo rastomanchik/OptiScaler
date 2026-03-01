@@ -231,8 +231,6 @@ struct AmdExtFfxApi : public IAmdExtFfxApi
 
     HRESULT STDMETHODCALLTYPE UpdateFfxApiProvider(void* pData, uint32_t dataSizeInBytes) override
     {
-        // To prevent crashes with amd_fidelityfx_dx12.dll & amd_fidelityfx_framegeneration_dx12.dll combo added this
-        // check after ML FG update this should be disabled!
         auto effectType = FfxApiProxy::GetType(reinterpret_cast<ExternalProviderData*>(pData)->descType);
 
         if (effectType >= FFXStructType::Unknown)

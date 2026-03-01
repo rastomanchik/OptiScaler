@@ -701,6 +701,7 @@ ffxReturnCode_t ffxDispatch_Vk(ffxContext* context, ffxDispatchDescHeader* desc)
         header = header->pNext;
 
     } while (header != nullptr && (size_t) header > 0x10000);
+    // WORKAROUND: Doom TDA sends non-nullptr pNext that is invalid and close to 0, try to filter out
 
     if (dispatchDesc == nullptr)
     {
