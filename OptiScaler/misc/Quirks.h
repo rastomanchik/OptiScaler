@@ -56,6 +56,7 @@ enum class GameQuirk : uint64_t
     CreateD3D12DeviceForLuma,
     ForceCreateD3D12Device,
     ForceDepthD32S8,
+    DoNotPreserveFGSwapChain,
     // Don't forget to add the new entry to printQuirks
     _
 };
@@ -99,6 +100,9 @@ static const QuirkEntry quirkTable[] = {
     // Silent Hill f
     QUIRK_ENTRY_UE(shf, GameQuirk::AlwaysCaptureFSRFGSwapchain),
 
+    // Tainted Grail - Fall of Avalon
+    QUIRK_ENTRY("fall of avalon.exe", GameQuirk::ForceAutoExposure),
+
     // Path of Exile 2
     QUIRK_ENTRY("pathofexile.exe", GameQuirk::LoadD3D12Manually, GameQuirk::DisableDxgiSpoofing),
     QUIRK_ENTRY("pathofexile_x64.exe", GameQuirk::LoadD3D12Manually, GameQuirk::DisableDxgiSpoofing),
@@ -115,7 +119,7 @@ static const QuirkEntry quirkTable[] = {
     QUIRK_ENTRY("sora_1st.exe", GameQuirk::UseFsr2Dx11Inputs, GameQuirk::DisableDxgiSpoofing),
 
     // Ninja Gaiden 4 (Steam)
-    QUIRK_ENTRY("ninjagaiden4-steam.exe", GameQuirk::DisableResizeSkip),
+    QUIRK_ENTRY("ninjagaiden4-steam.exe", GameQuirk::DisableResizeSkip, GameQuirk::DoNotPreserveFGSwapChain),
 
     // The Last of Us Part I
     QUIRK_ENTRY("tlou-i.exe", GameQuirk::AllowedFrameAhead2),
@@ -236,6 +240,13 @@ static const QuirkEntry quirkTable[] = {
     QUIRK_ENTRY("metroexodus.exe", GameQuirk::DisableDxgiSpoofing, GameQuirk::ForceBorderlessWhenUsingXeFG,
                 GameQuirk::ForceAutoExposure),
 
+    // Star Wars: Outlaws
+    // SL spoof enough to unlock everything DLSS
+    QUIRK_ENTRY("outlaws.exe", GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs,
+                GameQuirk::DisableDxgiSpoofing),
+    QUIRK_ENTRY("outlaws_plus.exe", GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs,
+                GameQuirk::DisableDxgiSpoofing),
+
     // SL spoof enough to unlock everything DLSS/No spoof needed for DLSS inputs
     //
     // The Witcher 3, Alan Wake 2, Crysis 3 Remastered, Marvel's Guardians of the Galaxy, UNCHARTED: Legacy of Thieves
@@ -299,8 +310,8 @@ static const QuirkEntry quirkTable[] = {
     // Disable FSR2/3 inputs due to crashing/custom implementations
     //
     // Forgive Me Father 2, Revenge of the Savage Planet, F1 22, Metal Eden, Until Dawn, Bloomand Rage, 171, Microsoft
-    // Flight Simulator (2020) - MSFS2020, Star Wars: Outlaws, Banishers: Ghosts of New Eden,Rune Factory Guardians of
-    // Azuma, Supraworld, F1 Manager 2024, Keeper (+ WinGDK PaganIdol version)
+    // Flight Simulator (2020) - MSFS2020, Banishers: Ghosts of New Eden,Rune Factory Guardians of Azuma, Supraworld, F1
+    // Manager 2024, Keeper (+ WinGDK PaganIdol version)
     QUIRK_ENTRY_UE(fmf2, GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),
     QUIRK_ENTRY_UE(towers, GameQuirk::DisableFSR2Inputs,
                    GameQuirk::DisableFSR3Inputs), // Revenge of the Savage Planet
@@ -310,8 +321,6 @@ static const QuirkEntry quirkTable[] = {
     QUIRK_ENTRY("bloom&rage.exe", GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),
     QUIRK_ENTRY_UE(bcg, GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs), // 171
     QUIRK_ENTRY("flightsimulator.exe", GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),
-    QUIRK_ENTRY("outlaws.exe", GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),
-    QUIRK_ENTRY("outlaws_plus.exe", GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),
     QUIRK_ENTRY_UE(banishers, GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),
     QUIRK_ENTRY_UE(game, GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs), // Rune
     QUIRK_ENTRY_UE(supraworld, GameQuirk::DisableFSR2Inputs, GameQuirk::DisableFSR3Inputs),

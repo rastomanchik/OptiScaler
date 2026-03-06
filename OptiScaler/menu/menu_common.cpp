@@ -3069,7 +3069,7 @@ bool MenuCommon::RenderMenu()
                     disabledMaskInput[optiFgIndex] = true;
                     fgInputDesc[optiFgIndex] = "Unsupported API";
                 }
-                else if (state.isWorkingAsNvngx)
+                else if (state.workingMode == WorkingMode::Nvngx)
                 {
                     disabledMaskInput[optiFgIndex] = true;
                     fgInputDesc[optiFgIndex] = "Unsupported Opti working mode";
@@ -3154,7 +3154,7 @@ bool MenuCommon::RenderMenu()
                 // Nukem's FG mod requirements
                 auto constexpr nukemsInputIndex = (uint32_t) FGInput::Nukems;
                 auto constexpr nukemsOutputIndex = (uint32_t) FGOutput::Nukems;
-                if (state.isWorkingAsNvngx)
+                if (state.workingMode == WorkingMode::Nvngx)
                 {
                     disabledMaskInput[nukemsInputIndex] = true;
                     fgInputDesc[nukemsInputIndex] = "Unsupported Opti working mode";
@@ -3398,7 +3398,7 @@ bool MenuCommon::RenderMenu()
 
                 // FSR FG controls
                 if (state.activeFgOutput == FGOutput::FSRFG && state.activeFgInput != FGInput::NoFG &&
-                    !state.isWorkingAsNvngx && state.currentFGSwapchain != nullptr)
+                    state.workingMode != WorkingMode::Nvngx && state.currentFGSwapchain != nullptr)
                 {
                     if (state.activeFgInput != FGInput::Upscaler ||
                         (currentFeature != nullptr && !currentFeature->IsFrozen()) && FfxApiProxy::IsFGReady())
@@ -3645,7 +3645,7 @@ bool MenuCommon::RenderMenu()
 
                 // XeFG controls
                 if (state.activeFgOutput == FGOutput::XeFG && state.activeFgInput != FGInput::NoFG &&
-                    !state.isWorkingAsNvngx && state.currentFGSwapchain != nullptr)
+                    state.workingMode != WorkingMode::Nvngx && state.currentFGSwapchain != nullptr)
                 {
                     if (XeFGProxy::InitXeFG() && currentFeature != nullptr && !currentFeature->IsFrozen())
                     {
@@ -3839,8 +3839,8 @@ bool MenuCommon::RenderMenu()
                 }
 
                 // OptiFG
-                if (state.api == DX12 && state.currentFGSwapchain != nullptr && !state.isWorkingAsNvngx &&
-                    state.activeFgInput == FGInput::Upscaler)
+                if (state.api == DX12 && state.currentFGSwapchain != nullptr &&
+                    state.workingMode != WorkingMode::Nvngx && state.activeFgInput == FGInput::Upscaler)
                 {
                     SeparatorWithHelpMarker("Frame Generation (OptiFG)", "Using upscaler data for FG");
 
@@ -4135,7 +4135,7 @@ bool MenuCommon::RenderMenu()
                 }
 
                 // Nukems Mod
-                if (!state.isWorkingAsNvngx && state.activeFgInput == FGInput::Nukems &&
+                if (state.workingMode != WorkingMode::Nvngx && state.activeFgInput == FGInput::Nukems &&
                     state.activeFgOutput == FGOutput::Nukems)
                 {
                     SeparatorWithHelpMarker("Frame Generation (FSR3-FG via Nukem's DLSSG)",
@@ -4202,7 +4202,7 @@ bool MenuCommon::RenderMenu()
                 }
 
                 // FSR-FG Inputs
-                if (state.currentFGSwapchain != nullptr && !state.isWorkingAsNvngx &&
+                if (state.currentFGSwapchain != nullptr && state.workingMode != WorkingMode::Nvngx &&
                     (state.activeFgInput == FGInput::FSRFG || state.activeFgInput == FGInput::FSRFG30))
                 {
                     SeparatorWithHelpMarker("Frame Generation (FSR-FG Inputs)", "Select FSR-FG in-game");
@@ -4243,7 +4243,7 @@ bool MenuCommon::RenderMenu()
                 }
 
                 // Streamline FG Inputs
-                if (state.currentFGSwapchain != nullptr && !state.isWorkingAsNvngx &&
+                if (state.currentFGSwapchain != nullptr && state.workingMode != WorkingMode::Nvngx &&
                     state.activeFgInput == FGInput::DLSSG)
                 {
                     SeparatorWithHelpMarker("Frame Generation (Streamline FG Inputs)", "Select DLSS-FG in-game");
@@ -4715,7 +4715,6 @@ bool MenuCommon::RenderMenu()
                             {
                                 _ssRatio = config->OutputScalingMultiplier.value_or(defaultRatio);
                                 _ssEnabled = config->OutputScalingEnabled.value_or_default();
-                                _ssUseFsr = config->OutputScalingUseFsr.value_or_default();
                                 _ssDownsampler = config->OutputScalingDownscaler.value_or_default();
                             }
 
@@ -4736,41 +4735,90 @@ bool MenuCommon::RenderMenu()
 
                             ImGui::BeginDisabled(!_ssEnabled);
                             {
-                                ImGui::Checkbox("Use FSR 1", &_ssUseFsr);
-                                ShowHelpMarker("Use FSR 1 for downscaling");
+                                const char* ds_modes[] = { "FSR1",     "Bicubic", "Catmull-Rom", "Lanczos2",
+                                                           "Lanczos3", "Kaiser2", "Kaiser3",     "MAGIC" };
+                                const char* ds_desc[] = { "Default option.\nGood enough image quality and very fast.",
+                                                          "Fastest traditional option.\nProduces a very soft/blurry "
+                                                          "image, but might be okay for downscaling.",
+                                                          "Designed primarily for downscaling.\nRetains good contrast "
+                                                          "with minimal artefacts, but softer than Lanczos.",
+                                                          "Lighter and faster than Lanczos3.\nLess prone to ringing "
+                                                          "artefacts, but slightly blurrier.",
+                                                          "Heavier version of Lanczos2.\nOffers the sharpest image, "
+                                                          "but is the most prone to ringing.",
+                                                          "Similar to Lanczos2.\nSmoother and less prone to artefacts "
+                                                          "than Lanczos, but slightly blurrier.",
+                                                          "Similar to Lanczos3.\nFar less prone to artefacting than "
+                                                          "Lanczos3, but much heavier on the GPU.",
+                                                          "Specialised to prevent artifacts.\nEliminates harsh halos "
+                                                          "for a natural look, but can appear slightly soft." };
+                                static_assert(std::size(ds_modes) == std::size(ds_desc));
+                                const size_t ds_count = std::size(ds_modes);
 
-                                ImGui::SameLine(0.0f, 6.0f);
+                                const bool isUpsampleRatio = _ssRatio < 1.0f;
+                                const char* disabledReason =
+                                    "Only FSR1 and Bicubic are supported when Ratio is below 1.0.";
 
-                                ImGui::BeginDisabled(_ssUseFsr || _ssRatio < 1.0f);
+                                ImGui::PushItemWidth(95.0f * config->MenuScale.value());
+
+                                size_t selectedIndex = static_cast<size_t>(_ssDownsampler);
+                                if (selectedIndex >= ds_count)
+                                    selectedIndex = static_cast<size_t>(Scaler::FSR1);
+
+                                const char* selectedName = ds_modes[selectedIndex];
+                                if (ImGui::BeginCombo("Downscaler", selectedName))
                                 {
-                                    const char* ds_modes[] = { "Bicubic", "Catmull-Rom", "Lanczos2", "Lanczos3",
-                                                               "Kaiser2", "Kaiser3",     "MAGIC" };
-                                    const std::string ds_modesDesc[] = { "", "", "", "", "", "", "" };
+                                    for (size_t n = 0; n < ds_count; n++)
+                                    {
+                                        const bool isDisabled =
+                                            isUpsampleRatio && n > static_cast<size_t>(Scaler::Bicubic);
 
-                                    ImGui::PushItemWidth(95.0f * config->MenuScale.value());
+                                        if (isDisabled)
+                                            ImGui::BeginDisabled();
 
-                                    PopulateCombo("Downscaler", &config->OutputScalingDownscaler, ds_modes,
-                                                  ds_modesDesc, 7);
+                                        auto mode = static_cast<Scaler>(n);
+                                        if (ImGui::Selectable(ds_modes[n], _ssDownsampler == mode))
+                                            _ssDownsampler = mode;
 
-                                    ImGui::PopItemWidth();
+                                        if (isDisabled)
+                                            ImGui::EndDisabled();
+
+                                        if (ds_desc[n] != nullptr && ds_desc[n][0] != '\0')
+                                        {
+                                            if (isDisabled)
+                                            {
+                                                std::string tooltip = ds_desc[n];
+                                                tooltip += "\n\n";
+                                                tooltip += disabledReason;
+                                                ShowTooltip(tooltip.c_str());
+                                            }
+                                            else
+                                            {
+                                                ShowTooltip(ds_desc[n]);
+                                            }
+                                        }
+                                    }
+                                    ImGui::EndCombo();
                                 }
-                                ImGui::EndDisabled();
+
+                                ImGui::PopItemWidth();
                             }
                             ImGui::EndDisabled();
 
                             bool applyEnabled = _ssEnabled != config->OutputScalingEnabled.value_or_default() ||
                                                 _ssRatio != config->OutputScalingMultiplier.value_or(defaultRatio) ||
-                                                _ssUseFsr != config->OutputScalingUseFsr.value_or_default() ||
-                                                (_ssRatio > 1.0f &&
-                                                 _ssDownsampler != config->OutputScalingDownscaler.value_or_default());
+                                                _ssDownsampler != config->OutputScalingDownscaler.value_or_default();
 
                             ImGui::BeginDisabled(!applyEnabled);
                             if (ImGui::Button("Применить"))
                             {
                                 config->OutputScalingEnabled = _ssEnabled;
                                 config->OutputScalingMultiplier = _ssRatio;
-                                config->OutputScalingUseFsr = _ssUseFsr;
-                                _ssDownsampler = config->OutputScalingDownscaler.value_or_default();
+
+                                if (_ssRatio < 1.0f && _ssDownsampler > Scaler::Bicubic)
+                                    _ssDownsampler = Scaler::FSR1;
+
+                                config->OutputScalingDownscaler = _ssDownsampler;
 
                                 if (currentFeature->Name() == "DLSSD")
                                     state.newBackend = "dlssd";

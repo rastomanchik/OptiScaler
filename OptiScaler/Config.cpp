@@ -452,12 +452,13 @@ bool Config::Reload(std::filesystem::path iniPath)
         // Output Scaling
         {
             OutputScalingEnabled.set_from_config(readBool("OutputScaling", "Enabled"));
-            OutputScalingUseFsr.set_from_config(readBool("OutputScaling", "UseFsr"));
-            OutputScalingDownscaler.set_from_config(readInt("OutputScaling", "Downscaler"));
-
-            if (OutputScalingDownscaler.has_value() &&
-                (OutputScalingDownscaler.value() < 0 || OutputScalingDownscaler.value() > 6))
-                OutputScalingDownscaler.reset();
+            if (auto setting = readInt("OutputScaling", "Downscaler"); setting.has_value())
+            {
+                if (setting.value() >= 0 && setting.value() < static_cast<int>(Scaler::Count))
+                    OutputScalingDownscaler.set_from_config(static_cast<Scaler>(setting.value()));
+                else
+                    OutputScalingDownscaler.reset();
+            }
 
             if (auto setting = readFloat("OutputScaling", "Multiplier"); setting.has_value())
                 OutputScalingMultiplier.set_from_config(std::clamp(setting.value(), 0.5f, 3.0f));
@@ -589,6 +590,7 @@ bool Config::Reload(std::filesystem::path iniPath)
             UESpoofIntelAtomics64.set_from_config(readBool("Spoofing", "UEIntelAtomics"));
             SpoofRegistry.set_from_config(readBool("Spoofing", "Registry"));
             SpoofedDriver.set_from_config(readWString("Spoofing", "RegistryDriver"));
+            SpoofUser32.set_from_config(readBool("Spoofing", "User32"));
         }
 
         // Inputs
@@ -695,6 +697,14 @@ std::string GetIntValue(std::optional<int> value, bool getHex = false)
         return std::format("{:#x}", value.value());
 
     return std::to_string(value.value());
+}
+
+std::string GetIntValue(std::optional<Scaler> value)
+{
+    if (!value.has_value())
+        return "auto";
+
+    return std::to_string(static_cast<int>(value.value()));
 }
 
 std::string GetFloatValue(std::optional<float> value)
@@ -886,8 +896,6 @@ bool Config::SaveIni()
                      GetBoolValue(Instance()->OutputScalingEnabled.value_for_config()).c_str());
         ini.SetValue("OutputScaling", "Multiplier",
                      GetFloatValue(Instance()->OutputScalingMultiplier.value_for_config()).c_str());
-        ini.SetValue("OutputScaling", "UseFsr",
-                     GetBoolValue(Instance()->OutputScalingUseFsr.value_for_config()).c_str());
         ini.SetValue("OutputScaling", "Downscaler", GetIntValue(Instance()->OutputScalingDownscaler).c_str());
     }
 
@@ -1248,6 +1256,7 @@ bool Config::SaveIni()
         ini.SetValue("Spoofing", "Registry", GetBoolValue(Instance()->SpoofRegistry.value_for_config()).c_str());
         ini.SetValue("Spoofing", "RegistryDriver",
                      wstring_to_string(Instance()->SpoofedDriver.value_for_config_or(L"auto")).c_str());
+        ini.SetValue("Spoofing", "User32", GetBoolValue(Instance()->SpoofUser32.value_for_config()).c_str());
 
         // Enable HAGS when DLSS-G will be used
         if (!Instance()->SpoofHAGS.has_value())
