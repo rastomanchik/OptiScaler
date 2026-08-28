@@ -59,10 +59,30 @@ class IFeature_Dx11wDx12 : public virtual IFeature_Dx11
     bool BaseInit(ID3D11Device* InDevice, ID3D11DeviceContext* InContext, NVSDK_NGX_Parameter* InParameters);
 
   public:
+    // dx11 w/dx12 can't be wrapped but the IFeature_Dx11, needs its own Init and Evaluate
+    bool InitInternal(ID3D11DeviceContext* InContext, NVSDK_NGX_Parameter* InParameters) final { return false; };
+    bool EvaluateInternal(ID3D11DeviceContext* DeviceContext, NVSDK_NGX_Parameter* InParameters) final
+    {
+        return false;
+    };
+
     bool Init(ID3D11Device* InDevice, ID3D11DeviceContext* InContext, NVSDK_NGX_Parameter* InParameters) final;
     bool Evaluate(ID3D11DeviceContext* DeviceContext, NVSDK_NGX_Parameter* InParameters) final;
     bool IsWithDx12() final { return true; }
     API Api() const override { return API::DX12; }
+
+    std::optional<double> ReadUpscalerTime(void* deviceContextVoid) override
+    {
+        if (auto feature = dx12Feature.get(); feature && Dx12CommandQueue)
+            return feature->ReadUpscalerTime(Dx12CommandQueue);
+
+        return std::nullopt;
+    };
+    void ReadDetailedGpuTimes(void* deviceContextVoid, std::vector<DetailedGpuTime>& detailedGpuTimes) override
+    {
+        if (auto feature = dx12Feature.get(); feature && Dx12CommandQueue)
+            return feature->ReadDetailedGpuTimes(Dx12CommandQueue, detailedGpuTimes);
+    };
 
     feature_version Version() final
     {
