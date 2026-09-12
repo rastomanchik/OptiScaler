@@ -3190,7 +3190,7 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     outputOptions = {
         { FGOutput::NoFG, "None" },
         { FGOutput::FSRFG, "FSR FG", "FSR3/4-FG, RDNA4 autoupgrades to FSR4-FG\n\nFSR4-FG sometimes better/worse than XeFG" },
-        { FGOutput::DLSSG, "DLSSG", "DLSSG output\ncan be used in conjuction with Nukem's for example" },
+        { FGOutput::DLSSG, "DLSSG", "DLSSG output\nCan be used in conjuction with Nukem's for example" },
         { FGOutput::XeFG, "XeFG", "XeFG - heaviest, but best universal FG\n\nXeFG 3 overall deals best with HUD\n\nEnable UI Composition if HUD ghosting" },
     };
 
@@ -3262,10 +3262,14 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
     nvngxOptions = {
         { FGNvngxReplacement::None, "None (Real DLSSG)", "Real DLSSG, For RTX 40xx and above"},
         { FGNvngxReplacement::Nukems, "Nukem's", "FSR 3 FG" },
-        { FGNvngxReplacement::Arturs, "Enabler", "FSR 3 MFG" },
-        { FGNvngxReplacement::FFX, "FSR 3/4 FG", "FSR 3/4 FG using the FFX" },
-        { FGNvngxReplacement::Combo, "FFX + Enabler", "FFX for the middle fake frame, Enabler for the rest\n\n"
-                                                      "2x - FFX\n3x - Enabler\n4x - FFX + Enabler\n5x - Enabler\n6x - FFX + Enabler" },
+        { FGNvngxReplacement::Arturs, "Enabler", "FSR 3 MFG mod" },
+        { FGNvngxReplacement::FFX, "FSR 3/4 FG", "FSR 3/4 FG using the FFX upgrade\n\n"
+                                                 "Partially based on Nukems, uses SL swapchain\n"
+                                                 "Possibly better performance and frame pacing compared to FSR-FG output"},
+        { FGNvngxReplacement::Combo, "FFX + Enabler", "Use if FSR4-FG is supported, otherwise stick to Enabler\n\n"
+                                                      "FFX used for the middle fake frame, Enabler for the rest\n\n"
+                                                      "2x - FFX\n3x - Enabler\n4x - FFX + Enabler\n5x - Enabler\n6x - FFX + Enabler\n\n"
+                                                      "Due to pacing, only odd number of fake frames are able to use FFX"},
     };
 
     // clang-format on
@@ -3386,8 +3390,6 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
 
             if (maxInterpolationCount >= 1)
             {
-                const char* intModes[] = { "Default", "Off", "2X", "3X", "4X", "5X", "6X" };
-
                 // Map config value to UI index
                 int currentSet = 0;
                 if (config->FGDLSSGOverrideInterpolationCount.has_value())
@@ -3395,15 +3397,29 @@ void MenuCommon::RenderFrameGenerationSelection(RenderMenuContext& ctx)
                     currentSet = config->FGDLSSGOverrideInterpolationCount.value() + 1;
                 }
 
-                const char* currentIntCount = intModes[currentSet];
+                std::string currentIntCountStr;
+                if (currentSet == 0)
+                    currentIntCountStr = "Default";
+                else if (currentSet == 1)
+                    currentIntCountStr = "Off";
+                else
+                    currentIntCountStr = std::to_string(currentSet) + "X";
 
                 ImGui::PushItemWidth(95.0f * menuResScale);
 
-                if (ImGui::BeginCombo("Override DLSSG Ratio", currentIntCount))
+                if (ImGui::BeginCombo("Override DLSSG Ratio", currentIntCountStr.c_str()))
                 {
                     for (int i = 0; i <= maxInterpolationCount + 1; i++)
                     {
-                        if (ImGui::Selectable(intModes[i], (currentSet == i)))
+                        std::string modeStr;
+                        if (i == 0)
+                            modeStr = "Default";
+                        else if (i == 1)
+                            modeStr = "Off";
+                        else
+                            modeStr = std::to_string(i) + "X";
+
+                        if (ImGui::Selectable(modeStr.c_str(), (currentSet == i)))
                         {
                             if (i == 0)
                             {
@@ -4009,17 +4025,19 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
         {
             ImGui::SameLine(0.0f, 16.0f);
 
-            const char* intModes[] = { "2X", "3X", "4X", "5X", "6X" };
             auto currentSet = fgOutput->GetInterpolatedFrameCount() - 1;
-            auto currentIntCount = intModes[currentSet];
+
+            std::string currentIntCountStr = std::to_string(currentSet + 2) + "X";
 
             ImGui::PushItemWidth(95.0f * menuResScale);
 
-            if (ImGui::BeginCombo("MFG", currentIntCount))
+            if (ImGui::BeginCombo("MFG", currentIntCountStr.c_str()))
             {
                 for (int i = 0; i < maxInterpolationCount; i++)
                 {
-                    if (ImGui::Selectable(intModes[i], (currentSet == i)))
+                    std::string modeStr = std::to_string(i + 2) + "X";
+
+                    if (ImGui::Selectable(modeStr.c_str(), (currentSet == i)))
                     {
                         LOG_DEBUG("XeFG Interpolation Count set to: {}", i + 1);
                         state.fgChanged = true;
@@ -4173,17 +4191,19 @@ void MenuCommon::RenderFrameGenerationRuntimeSettings(RenderMenuContext& ctx)
 
             ImGui::BeginDisabled(config->FGDLSSGForceDMFG.value_or_default());
 
-            const char* intModes[] = { "2X", "3X", "4X", "5X", "6X" };
             auto currentSet = fgOutput->GetInterpolatedFrameCount() - 1;
-            auto currentIntCount = intModes[currentSet];
+
+            std::string currentIntCountStr = std::to_string(currentSet + 2) + "X";
 
             ImGui::PushItemWidth(95.0f * menuResScale);
 
-            if (ImGui::BeginCombo("MFG", currentIntCount))
+            if (ImGui::BeginCombo("MFG", currentIntCountStr.c_str()))
             {
                 for (int i = 0; i < maxInterpolationCount; i++)
                 {
-                    if (ImGui::Selectable(intModes[i], (currentSet == i)))
+                    std::string modeStr = std::to_string(i + 2) + "X";
+
+                    if (ImGui::Selectable(modeStr.c_str(), (currentSet == i)))
                     {
                         LOG_DEBUG("DLSSG Interpolation Count set to: {}", i + 1);
                         config->FGDLSSGInterpolationCount = i + 1;
